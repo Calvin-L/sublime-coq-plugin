@@ -1,0 +1,4 @@
+[
+    { "keys": ["ctrl+enter"], "command": "coq" },
+    { "keys": ["ctrl+shift+k"], "command": "coq_kill" }
+]
