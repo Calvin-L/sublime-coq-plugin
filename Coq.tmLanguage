@@ -38,14 +38,94 @@
             <key>match</key>
             <string>\b(Require|Import|Export)\b</string>
             <key>comment</key>
-            <string>Vernacular keywords</string>
+            <string>Vernacular import keywords</string>
             <key>name</key>
             <string>keyword.control.import.coq</string>
         </dict>
 
         <dict>
             <key>match</key>
-            <string>\b(Ltac|Fixpoint|Inductive|Definition|Hint|Constructors|Resolve|Rewrite|Lemma|Theorem|Proof|Qed|Defined|Implicit|Set|Arguments|Notation|Section|End|Variables|Record)\b</string>
+            <string>(Lemma|Theorem)\s+([a-zA-Z][a-zA-Z0-9_']*)</string>
+            <key>comment</key>
+            <string>Theorem declarations</string>
+            <key>captures</key>
+            <dict>
+                <key>1</key>
+                <dict>
+                    <key>name</key>
+                    <string>keyword.source.coq</string>
+                </dict>
+                <key>2</key>
+                <dict>
+                    <key>name</key>
+                    <string>entity.name.function.theorem.coq</string>
+                </dict>
+            </dict>
+        </dict>
+
+        <dict>
+            <key>match</key>
+            <string>(Fixpoint|Definition|Let)\s+([a-zA-Z][a-zA-Z0-9_']*)</string>
+            <key>comment</key>
+            <string>Definitions</string>
+            <key>captures</key>
+            <dict>
+                <key>1</key>
+                <dict>
+                    <key>name</key>
+                    <string>keyword.source.coq</string>
+                </dict>
+                <key>2</key>
+                <dict>
+                    <key>name</key>
+                    <string>entity.name.function.coq</string>
+                </dict>
+            </dict>
+        </dict>
+
+        <dict>
+            <key>match</key>
+            <string>(Inductive)\s+([a-zA-Z][a-zA-Z0-9_']*)</string>
+            <key>comment</key>
+            <string>Inductive type declarations</string>
+            <key>captures</key>
+            <dict>
+                <key>1</key>
+                <dict>
+                    <key>name</key>
+                    <string>keyword.source.coq</string>
+                </dict>
+                <key>2</key>
+                <dict>
+                    <key>name</key>
+                    <string>entity.name.type.coq</string>
+                </dict>
+            </dict>
+        </dict>
+
+        <dict>
+            <key>match</key>
+            <string>(Ltac)\s+([a-zA-Z][a-zA-Z0-9_']*)</string>
+            <key>comment</key>
+            <string>Ltac declarations</string>
+            <key>captures</key>
+            <dict>
+                <key>1</key>
+                <dict>
+                    <key>name</key>
+                    <string>keyword.source.coq</string>
+                </dict>
+                <key>2</key>
+                <dict>
+                    <key>name</key>
+                    <string>entity.name.function.ltac</string>
+                </dict>
+            </dict>
+        </dict>
+
+        <dict>
+            <key>match</key>
+            <string>\b(Hint|Constructors|Resolve|Rewrite|Proof|Qed|Defined|Implicit|Set|Arguments|Notation|Section|End|Variables|Record|Check|Print|Eval)\b</string>
             <key>comment</key>
             <string>Vernacular keywords</string>
             <key>name</key>
@@ -56,7 +136,7 @@
             <key>match</key>
             <string>\b(admit|Admitted)\b</string>
             <key>comment</key>
-            <string>No admits</string>
+            <string>Admits are bad</string>
             <key>name</key>
             <string>invalid.illegal.admit.coq</string>
         </dict>
@@ -90,27 +170,27 @@
 
         <dict>
             <key>match</key>
-            <string>\b(match|fun|with|returns|end|let|in|by|as|using)\b</string>
-            <key>comment</key>
-            <string>Ltac keywords</string>
-            <key>name</key>
-            <string>keyword.control.gallina</string>
-        </dict>
-
-        <dict>
-            <key>match</key>
             <string>\b(into|with|eqn)\b</string>
             <key>comment</key>
-            <string>Ltac keywords</string>
+            <string>Common Ltac connectors</string>
             <key>name</key>
             <string>support.function.builtin.ltac</string>
         </dict>
 
         <dict>
             <key>match</key>
+            <string>\b(match|fun|with|returns|end|let|in|by|as|using)\b</string>
+            <key>comment</key>
+            <string>Gallina keywords</string>
+            <key>name</key>
+            <string>keyword.control.gallina</string>
+        </dict>
+
+        <dict>
+            <key>match</key>
             <string>\b(intro|intros|induction|destruct|auto|eauto|apply|eapply|assumption|constructor|reflexivity|inversion|assert|split|omega|unfold|specialize|rewrite|refine|simpl|intuition|firstorder|generalize|idtac|exist|exists|elim|rename|subst|congruence|trivial)\b</string>
             <key>comment</key>
-            <string>Ltac keywords</string>
+            <string>Ltac builtins</string>
             <key>name</key>
             <string>support.function.builtin.ltac</string>
         </dict>
