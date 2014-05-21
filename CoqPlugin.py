@@ -423,6 +423,8 @@ class CoqWorker(threading.Thread):
             if parsed is None or parsed.attrib.get("val") != "good":
                 print("Error!")
                 error = parsed.text
+                if cmd:
+                    idx = cmd.start
                 break
             if forward:
                 self.undo_stack.push(cmd)
