@@ -212,7 +212,9 @@ class CoqWorker(threading.Thread):
     def _on_start(self):
         self.response_view.set_scratch(True)
         self.response_view.set_read_only(True)
-        self.response_view.set_name("*** Coq for {} ***".format(self.view.name() or self.view.file_name()))
+        name = self.view.name() or os.path.basename(self.view.file_name() or "")
+        title = "*** Coq for {} ***".format(name) if name else "*** Coq ***"
+        self.response_view.set_name(title)
 
     def _on_stop(self):
         self.coqtop.stop()
