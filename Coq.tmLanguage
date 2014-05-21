@@ -170,16 +170,16 @@
 
         <dict>
             <key>match</key>
-            <string>\b(into|with|eqn)\b</string>
+            <string>\b(into|with|eqn|by|as|using)\b</string>
             <key>comment</key>
             <string>Common Ltac connectors</string>
             <key>name</key>
-            <string>support.function.builtin.ltac</string>
+            <string>keyword.control.ltac</string>
         </dict>
 
         <dict>
             <key>match</key>
-            <string>\b(match|fun|with|returns|end|let|in|by|as|using)\b</string>
+            <string>\b(match|fun|with|returns|end|let|in)\b</string>
             <key>comment</key>
             <string>Gallina keywords</string>
             <key>name</key>
@@ -188,7 +188,7 @@
 
         <dict>
             <key>match</key>
-            <string>\b(intro|intros|induction|destruct|auto|eauto|apply|eapply|assumption|constructor|reflexivity|inversion|assert|split|omega|unfold|specialize|rewrite|refine|simpl|intuition|firstorder|generalize|idtac|exist|exists|elim|rename|subst|congruence|trivial)\b</string>
+            <string>\b(intro|intros|induction|destruct|auto|eauto|apply|eapply|assumption|constructor|reflexivity|inversion|assert|split|omega|unfold|specialize|rewrite|refine|simpl|intuition|firstorder|generalize|idtac|exist|exists|elim|rename|subst|congruence|trivial|left|right)\b</string>
             <key>comment</key>
             <string>Ltac builtins</string>
             <key>name</key>
