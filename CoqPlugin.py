@@ -6,6 +6,7 @@ Sublime Text 3 plugin for Coq.
 import collections
 import os.path
 import re
+import string
 import subprocess
 import threading
 import time
@@ -25,7 +26,29 @@ import sublime_plugin
 # https://github.com/wuub/SublimeREPL/blob/master/sublimerepl.py
 
 # --------------------------------------------------------- Constants
-BULLET_CHARS = { '-', '+', '*', '{', '}' }
+
+BULLET_CHARS = { "-", "+", "*", "{", "}" }
+LTAC_START_COMMANDS = { "Definition", "Lemma", "Theorem" }
+LTAC_END_COMMANDS = { "Admitted", "Qed", "Defined" }
+PUNCTUATION_REGEX = re.compile(r"[{}]".format(re.escape(string.punctuation)))
+REWIND_CMD = '<call val="rewind" steps="1"></call>' # multiple steps only works for ltac, so we just do one each time to be safe
+
+# --------------------------------------------------------- Types
+
+# Various commands. We need to differentiate these because when you finish a
+# block of Ltac (e.g. Qed) the whole block of Ltac becomes ONE command. That
+# is, while in Ltac mode, "Undo" undoes one Ltac statement, but outside of Ltac
+# mode, "Undo" undoes entire proofs.
+COMMAND_FIELDS = ["start", "end", "text"]
+
+# start of Ltac, e.g. Definition [...]. or Theorem [...].
+LtacStartCommand = collections.namedtuple("LtacStartCommand", COMMAND_FIELDS)
+
+# end of Ltac, e.g. Admitted, Qed, Defined.
+LtacEndCommand = collections.namedtuple("LtacEndCommand", COMMAND_FIELDS)
+
+# everything else: vernacular, ltac, etc.
+NormalCommand = collections.namedtuple("NormalCommand", COMMAND_FIELDS)
 
 # --------------------------------------------------------- Helpers
 
@@ -62,12 +85,36 @@ def coq_command_end_filter(view, start=0):
         return "coq" in scope_name and not ("comment" in scope_name or "string" in scope_name)
     return filt
 
-def next_command(view, start=0):
+def prev_command(view, end=0):
+    """
+    Returns the index of the final "." of the last complete Coq command in the
+    given view that comes before the given end point. May return None if
+    there are no such commands.
+    """
+    s = view.substr(sublime.Region(0, end))
+    return find_index(s, ".", coq_command_end_filter(view), forward=False)
+
+def parse_command(index, text):
+    """
+    Given some text and a start index, returns one of NormalCommand,
+    LtacStartCommand, or LtacEndCommand.
+    """
+    token = text.split()[0] # first word of the command
+    token = PUNCTUATION_REGEX.sub("", token) # remove punctuation
+    ty = NormalCommand
+    if token in LTAC_START_COMMANDS and ":=" not in text:
+        ty = LtacStartCommand
+    elif token in LTAC_END_COMMANDS:
+        ty = LtacEndCommand
+    return ty(text=text, start=index, end=index+len(text))
+
+def next_command_text(view, start=0):
     """
     Returns (index, cmd) where
      - index is the index of the final char of the next complete Coq command in
        the given view after the given offset (start)
      - cmd is the command itself
+     - index + len(cmd) gives the ending index of the command
 
     Returns (None, None) if there are no more commands or if parsing fails.
     """
@@ -86,14 +133,16 @@ def next_command(view, start=0):
             cmd = cmd[:first_non_whitespace_match.end()]
     return (idx, cmd)
 
-def prev_command(view, end=0):
+def next_command(view, start=0):
     """
-    Returns the index of the final "." of the last complete Coq command in the
-    given view that comes before the given end point. May return None if
-    there are no such commands.
+    Returns one of NormalCommand, LtacStartCommand, or LtacEndCommand
+    according to the contract of next_command_text. May return None if there
+    are no more commands.
     """
-    s = view.substr(sublime.Region(0, end))
-    return find_index(s, ".", coq_command_end_filter(view), forward=False)
+    idx, cmd = next_command_text(view, start)
+    if idx is None or cmd is None:
+        return None
+    return parse_command(idx - len(cmd) + 1, cmd)
 
 def split_commands(view, start, end):
     """
@@ -101,15 +150,17 @@ def split_commands(view, start, end):
     not on a command boundary, then the first yielded command will be partial.
     """
     while start < end:
-        idx, cmd = next_command(view, start)
-        if idx < start:
-            print("Warning: next_command returned idx < start")
+        cmd = next_command(view, start)
+        if cmd is None:
+            # normal termination condition: no more commands in file
             break
-        if idx is None:
-            break # normal termination condition
-        print("==> {:5} {}".format(view.rowcol(idx), cmd))
+        if cmd.start < start:
+            # super safety code to prevent infinite loops
+            print("Insanity: next_command starts before start!?")
+            break
+        print("==> {}-{} {:5} {} [len={}]".format(cmd.start, cmd.end, view.rowcol(cmd.start), cmd.text.strip(), len(cmd.text)))
         yield cmd
-        start = idx + 1
+        start = cmd.end + 1
 
 def format_response(text, error=None):
     """
@@ -140,7 +191,7 @@ def format_response(text, error=None):
         output += "  " + ("-" * 40) + "\n"
         output += "  {}\n".format(goal.text)
     if error:
-        output += "\nError: {}".format(error)
+        output += "\n{}".format(error.strip())
     return output
 
 # --------------------------------------------------------- Coqtop Interaction
@@ -182,6 +233,67 @@ class CoqtopProc(object):
         self.proc.terminate()
         self.proc = None
 
+# --------------------------------------------------------- Undo Stack
+
+class UndoStack(object):
+    """
+    Keeps a record of commands we sent to coqtop. This helps us do two things:
+     1. We can properly collapse definitions into a single "Undo-able" op
+     2. We can stay in sync with coqtop when the user has modified the file
+        in unexpected ways.
+    """
+
+    def __init__(self):
+        self.stack = []
+
+    def most_recent(self, ty):
+        """
+        Returns index in self.stack of the most recent command of the given
+        type. May return None if no such command exists.
+        """
+        i = 1
+        for cmd in self.stack.__reversed__():
+            if isinstance(cmd, ty):
+                return len(self.stack) - i
+            i += 1
+        return None
+
+    def push(self, cmd):
+        if isinstance(cmd, LtacEndCommand):
+            # search backwards for the LtacStartCommand
+            idx = self.most_recent(LtacStartCommand)
+            if idx:
+                # collapse this ltac stuff and change it to a single vernac command
+                start_cmd = self.stack[idx]
+                cmd = NormalCommand(
+                    start=start_cmd.start,
+                    end=cmd.end,
+                    text=''.join(x.text for x in self.stack[idx:]) + cmd.text)
+                print("Collapsed {} commands into one: {}".format(len(self.stack) - idx + 1, cmd.text))
+                self.stack = self.stack[:idx]
+            else:
+                print("Insanity: got an Ltac end command with no start!?")
+        self.stack.append(cmd)
+
+    def rewind_to(self, index):
+        """
+        Returns the commands that come after index. The length of the returned
+        list indicates how many undos must be performed to rewind to the given
+        index. The "start" location of the first command in the list indicates
+        the new high-water mark for what has been proven so far.
+
+        The returned commands are removed from this UndoStack.
+        """
+        to_undo = []
+        for cmd in self.stack.__reversed__():
+            if cmd.end > index:
+                to_undo.append(cmd)
+            else:
+                break
+        self.stack = self.stack[:(len(self.stack) - len(to_undo))]
+        to_undo.reverse()
+        return to_undo
+
 # --------------------------------------------------------- Coq Worker
 
 # maps view IDs to worker threads
@@ -206,6 +318,7 @@ class CoqWorker(threading.Thread):
             working_dir = os.path.dirname(f)
         self.coqtop = CoqtopProc(working_dir=working_dir)
         self.response_view = self.view.window().new_file()
+        self.undo_stack = UndoStack()
         self._on_start()
 
     def _on_start(self):
@@ -284,30 +397,36 @@ class CoqWorker(threading.Thread):
 
         cmds = []
 
-        if idx > self.coq_eval_point:
-            i = self.coq_eval_point
+        forward = idx > self.coq_eval_point
+        if forward:
             for cmd in split_commands(self.view, self.coq_eval_point, idx):
-                to_send = '<call val="interp" id="0">{}</call>'.format(xml_encode(cmd.strip()))
-                i += len(cmd)
-                cmds.append((to_send, i))
+                to_send = '<call val="interp" id="0">{}</call>'.format(xml_encode(cmd.text.strip()))
+                cmds.append((to_send, cmd))
         else:
-            steps_back = count(split_commands(self.view, idx, self.coq_eval_point))
-            to_send = '<call val="rewind" steps="{}"></call>'.format(steps_back)
-            cmds.append((to_send, idx))
+            cmds_to_undo = self.undo_stack.rewind_to(idx)
+            print("Undoing {} things...".format(len(cmds_to_undo)))
+            for cmd in cmds_to_undo:
+                print("Undoing {}".format(cmd.text.strip()))
+                cmds.append((REWIND_CMD, None))
+            if cmds_to_undo:
+                idx = cmds_to_undo[0].start
+                self.view.erase_regions("Coq")
+                self.view.add_regions("Coq", [sublime.Region(0, idx)], scope=done_scope_name, flags=done_flags)
 
         error = None
 
-        for cmd, end_idx in cmds:
-            print("sending: {}".format(cmd))
-            response = self.coqtop.send(cmd)
+        for coq_cmd, cmd in cmds:
+            print("sending: {}".format(coq_cmd))
+            response = self.coqtop.send(coq_cmd)
             print("got full response: {}".format(response))
             parsed = ET.fromstring(response)
             if parsed is None or parsed.attrib.get("val") != "good":
                 print("Error!")
                 error = parsed.text
-                idx = end_idx + 1
                 break
-            self.view.add_regions("Coq", [sublime.Region(0, end_idx)], scope=done_scope_name, flags=done_flags)
+            if forward:
+                self.undo_stack.push(cmd)
+                self.view.add_regions("Coq", [sublime.Region(0, cmd.end)], scope=done_scope_name, flags=done_flags)
 
         print("asking for goal")
         response = self.coqtop.send('<call val="goal"></call>')
