@@ -206,15 +206,26 @@ class CoqWorker(threading.Thread):
             working_dir = os.path.dirname(f)
         self.coqtop = CoqtopProc(working_dir=working_dir)
         self.response_view = self.view.window().new_file()
-        self.response_view.set_syntax_file("Packages/sublime-coq/Coq.tmLanguage")
         self._on_start()
 
     def _on_start(self):
+        self.response_view.set_syntax_file("Packages/sublime-coq/Coq.tmLanguage")
         self.response_view.set_scratch(True)
         self.response_view.set_read_only(True)
         name = self.view.name() or os.path.basename(self.view.file_name() or "")
         title = "*** Coq for {} ***".format(name) if name else "*** Coq ***"
         self.response_view.set_name(title)
+
+        window = self.view.window()
+        ngroups = window.num_groups()
+        if ngroups == 1:
+            window.run_command("new_pane")
+        else:
+            group = window.num_groups() - 1
+            if window.get_view_index(self.view)[1] == group:
+                group -= 1
+            window.set_view_index(self.response_view, group, 0)
+        window.focus_view(self.view)
 
     def _on_stop(self):
         self.coqtop.stop()
@@ -247,6 +258,11 @@ class CoqWorker(threading.Thread):
         """
         Set coq evaluation to idx in the given buffer.
         """
+        if not self.response_view.window():
+            print("worker {} has no more response buffer; stopping")
+            self._on_stop()
+            return
+
         idx = prev_command(self.view, idx)
         if idx is None:
             print("no more commands in file?")
@@ -257,6 +273,14 @@ class CoqWorker(threading.Thread):
         if idx == self.coq_eval_point:
             print("no need to go anywhere")
             return
+
+        todo_scope_name = "meta.coq.todo"
+        todo_flags = 0 # sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
+        done_scope_name = "meta.coq.proven"
+        done_flags = 0
+
+        self.view.add_regions("CoqTODO", [sublime.Region(self.coq_eval_point, idx)], scope=todo_scope_name, flags=todo_flags)
+        self.response_view.run_command("coq_update_output_buffer", {"text": "Working..."})
 
         cmds = []
 
@@ -270,14 +294,6 @@ class CoqWorker(threading.Thread):
             steps_back = count(split_commands(self.view, idx, self.coq_eval_point))
             to_send = '<call val="rewind" steps="{}"></call>'.format(steps_back)
             cmds.append((to_send, idx))
-
-        todo_scope_name = "meta.coq.todo"
-        todo_flags = 0 # sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
-        done_scope_name = "meta.coq.proven"
-        done_flags = 0
-
-        self.view.add_regions("CoqTODO", [sublime.Region(self.coq_eval_point, idx)], scope=todo_scope_name, flags=todo_flags)
-        self.response_view.run_command("coq_update_output_buffer", {"text": "Working..."})
 
         error = None
 
@@ -297,12 +313,7 @@ class CoqWorker(threading.Thread):
         response = self.coqtop.send('<call val="goal"></call>')
         response = format_response(response, error)
         self.response_view.run_command("coq_update_output_buffer", {"text": response})
-        if not self.response_view.window():
-            window = self.view.window()
-            group, index = window.get_view_index(self.view)
-            window.set_view_index(self.response_view, group, index)
         self.view.window().focus_view(self.view)
-
         self.view.erase_regions("CoqTODO")
         self.coq_eval_point = idx
 
