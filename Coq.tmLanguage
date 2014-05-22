@@ -179,7 +179,7 @@
 
         <dict>
             <key>match</key>
-            <string>\b(match|fun|with|returns|end|let|in)\b</string>
+            <string>\b(match|fun|with|returns|end|let|in|if|then|else)\b</string>
             <key>comment</key>
             <string>Gallina keywords</string>
             <key>name</key>
@@ -188,7 +188,7 @@
 
         <dict>
             <key>match</key>
-            <string>\b(intro|intros|induction|destruct|auto|eauto|apply|eapply|assumption|constructor|reflexivity|inversion|assert|split|omega|unfold|specialize|rewrite|refine|simpl|intuition|firstorder|generalize|idtac|exist|exists|elim|rename|subst|congruence|trivial|left|right)\b</string>
+            <string>\b(intro|intros|induction|destruct|auto|eauto|apply|eapply|assumption|constructor|reflexivity|inversion|assert|split|omega|unfold|specialize|rewrite|refine|simpl|intuition|firstorder|generalize|idtac|exist|exists|elim|rename|subst|congruence|trivial|left|right|pose|discriminate|clearbody|contradict)\b</string>
             <key>comment</key>
             <string>Ltac builtins</string>
             <key>name</key>
