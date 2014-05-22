@@ -302,6 +302,7 @@ coq_threads = dict()
 # messages
 StopMessage = object()
 EvalMessage = collections.namedtuple("EvalMessage", ["pos"])
+CheckForModificationMessage = object()
 
 class CoqWorker(threading.Thread):
 
@@ -364,8 +365,25 @@ class CoqWorker(threading.Thread):
                 return
             elif isinstance(req, EvalMessage):
                 self.do_coq_thing(req.pos)
+            elif req is CheckForModificationMessage:
+                print("worker {} is checking for modifications...")
+                self.check_for_modifications()
             else:
                 print("unknown message: {}".format(req))
+
+    def check_for_modifications(self):
+        """
+        Called when the user altered the underlying buffer. We might need to
+        rewind if they changed something in the proven region.
+        """
+        comparison = UndoStack()
+        cmds = split_commands(self.view, 0, self.coq_eval_point)
+        for cmd in cmds:
+            comparison.push(cmd)
+        for expected, actual in zip(self.undo_stack.stack, comparison.stack):
+            if expected.text.strip() != actual.text.strip():
+                self.do_coq_thing(expected.start)
+                return
 
     def do_coq_thing(self, idx):
         """
@@ -498,8 +516,7 @@ class CoqViewEventListener(sublime_plugin.EventListener):
         worker_key = view.id()
         worker = coq_threads.get(worker_key, None)
         if worker:
-            # UGH
-            pass
+            worker.send_req(CheckForModificationMessage)
 
     def on_close(self, view):
         for view_id, worker in coq_threads.items():
