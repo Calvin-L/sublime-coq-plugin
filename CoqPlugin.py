@@ -33,7 +33,35 @@ LTAC_END_COMMANDS = { "Admitted", "Qed", "Defined" }
 PUNCTUATION_REGEX = re.compile(r"[{}]".format(re.escape(string.punctuation)))
 REWIND_CMD = '<call val="rewind" steps="1"></call>' # multiple steps only works for ltac, so we just do one each time to be safe
 
-# --------------------------------------------------------- Types
+# --------------------------------------------------------- Helpers
+
+def xml_encode(s):
+    return (s
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("'", "&apos;")
+        .replace('"', "&quot;"))
+
+def count(seq):
+    return sum(1 for _ in seq)
+
+def find_index(haystack, needle, predicate, forward=True):
+    """
+    Find the index of needle in haystack where predicate(index) is true.
+    If forward=True, it searches forward from the beginning, otherwise it
+    searches backward from the end.
+    """
+    def f(limit):
+        start, end = (limit, len(haystack)) if forward else (0, limit)
+        return (haystack.find(needle, start, end)
+                if forward else haystack.rfind(needle, start, end))
+    idx = f(0 if forward else len(haystack))
+    while idx >= 0 and not predicate(idx):
+        idx = f(idx + (1 if forward else 0))
+    return idx if idx >= 0 else None
+
+# --------------------------------------------------------- Parsing
 
 # Various commands. We need to differentiate these because when you finish a
 # block of Ltac (e.g. Qed) the whole block of Ltac becomes ONE command. That
@@ -50,35 +78,6 @@ LtacEndCommand = collections.namedtuple("LtacEndCommand", COMMAND_FIELDS)
 # everything else: vernacular, ltac, etc.
 NormalCommand = collections.namedtuple("NormalCommand", COMMAND_FIELDS)
 
-# --------------------------------------------------------- Helpers
-
-def xml_encode(s):
-    return (s
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("'", "&apos;")
-        .replace('"', "&quot;"))
-
-def count(seq):
-    i = 0
-    for x in seq:
-        i += 1
-    return i
-
-# --------------------------------------------------------- Parsing
-
-def find_index(haystack, needle, predicate, forward=True):
-    def f(limit):
-        start, end = (limit, len(haystack)) if forward else (0, limit)
-        return (haystack.find(needle, start, end)
-                if forward else haystack.rfind(needle, start, end))
-
-    idx = f(0 if forward else len(haystack))
-    while idx >= 0 and not predicate(idx):
-        idx = f(idx + (1 if forward else 0))
-    return idx if idx >= 0 else None
-
 def coq_command_end_filter(view, start=0):
     def filt(i):
         scope_name = view.scope_name(i + start)
@@ -89,7 +88,9 @@ def prev_command(view, end=0):
     """
     Returns the index of the final "." of the last complete Coq command in the
     given view that comes before the given end point. May return None if
-    there are no such commands.
+    there are no such commands. Note that this is not a perfect mirror of
+    next_command; it is only used to find command boundaries and I'm pretty
+    sure we only have to worry about command boundaries at fullstops.
     """
     s = view.substr(sublime.Region(0, end))
     return find_index(s, ".", coq_command_end_filter(view), forward=False)
@@ -124,6 +125,8 @@ def next_command_text(view, start=0):
         return (None, None)
     idx += start
     cmd = view.substr(sublime.Region(start, idx + 1))
+
+    # Bullet characters in Ltac require some care; each is its own command
     first_non_whitespace_match = re.search(r'\S', cmd)
     if first_non_whitespace_match:
         first_char_start = first_non_whitespace_match.start()
