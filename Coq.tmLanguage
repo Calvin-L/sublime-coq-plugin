@@ -188,7 +188,7 @@
 
         <dict>
             <key>match</key>
-            <string>\b(intro|intros|induction|destruct|auto|eauto|apply|eapply|assumption|constructor|reflexivity|inversion|assert|split|omega|unfold|specialize|rewrite|refine|simpl|intuition|firstorder|generalize|idtac|exist|exists|elim|rename|subst|congruence|trivial|left|right|pose|discriminate|clearbody|contradict)\b</string>
+            <string>\b(intro|intros|induction|destruct|auto|eauto|eassumption|apply|eapply|assumption|constructor|reflexivity|inversion|assert|split|omega|fold|unfold|specialize|rewrite|refine|simpl|intuition|firstorder|generalize|idtac|exist|exists|eexists|elim|rename|subst|congruence|trivial|left|right|pose|discriminate|clearbody|contradict|exact|dependent|remember)\b</string>
             <key>comment</key>
             <string>Ltac builtins</string>
             <key>name</key>
@@ -196,12 +196,21 @@
         </dict>
 
         <dict>
+            <key>applyEndPatternLast</key>
+            <integer>1</integer>
             <key>begin</key>
-            <string>\(\*</string>
+            <string>\(\*(?!#)</string>
             <key>end</key>
             <string>\*\)</string>
             <key>name</key>
             <string>comment.block.coq</string>
+            <key>patterns</key>
+            <array>
+                <dict>
+                    <key>include</key>
+                    <string>#block_comment</string>
+                </dict>
+            </array>
         </dict>
 
         <dict>
@@ -274,6 +283,29 @@
         </dict>
 
     </array>
+
+    <key>repository</key>
+    <dict>
+        <key>block_comment</key>
+        <dict>
+            <key>applyEndPatternLast</key>
+            <integer>1</integer>
+            <key>begin</key>
+            <string>\(\*(?!#)</string>
+            <key>end</key>
+            <string>\*\)</string>
+            <key>name</key>
+            <string>comment.block.coq</string>
+            <key>patterns</key>
+            <array>
+                <dict>
+                    <key>include</key>
+                    <string>#block_comment</string>
+                </dict>
+            </array>
+        </dict>
+    </dict>
+
     <key>scopeName</key>
     <string>source.coq</string>
     <key>uuid</key>

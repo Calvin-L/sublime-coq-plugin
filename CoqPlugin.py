@@ -27,6 +27,7 @@ import sublime_plugin
 
 # --------------------------------------------------------- Constants
 
+COQTOP_CMD = "/usr/local/bin/coqtop"
 BULLET_CHARS = { "-", "+", "*", "{", "}" }
 LTAC_START_COMMANDS = { "Definition", "Lemma", "Theorem" }
 LTAC_END_COMMANDS = { "Admitted", "Qed", "Defined" }
@@ -200,12 +201,15 @@ def format_response(text, error=None):
 # --------------------------------------------------------- Coqtop Interaction
 
 class CoqtopProc(object):
+
     def __init__(self, working_dir=None):
         """
         Spawns a new coqtop process and creates pipes for interaction.
         """
+        print("Starting {} in {}".format(COQTOP_CMD, working_dir))
         self.proc = subprocess.Popen(
-            ["/usr/local/bin/coqtop", "-ideslave"],
+            [COQTOP_CMD, "-ideslave"],
+            bufsize=0,
             cwd=working_dir,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE)
@@ -216,6 +220,10 @@ class CoqtopProc(object):
         the response text.
         """
 
+        if text[-1] != "\n":
+            text += "\n"
+        print("sending: {}".format(text.encode("unicode-escape")))
+
         # Send
         self.proc.stdin.write(text.encode('ascii'))
         self.proc.stdin.flush()
@@ -225,9 +233,12 @@ class CoqtopProc(object):
         while "</value>" not in s:
             response = self.proc.stdout.read(1024).decode('ascii')
             print("got partial response: {}".format(response))
+            if not response:
+                break
             s += response
-        return s
 
+        print("got full response: {}".format(s))
+        return s
 
     def stop(self):
         """
@@ -437,9 +448,7 @@ class CoqWorker(threading.Thread):
         error = None
 
         for coq_cmd, cmd in cmds:
-            print("sending: {}".format(coq_cmd))
             response = self.coqtop.send(coq_cmd)
-            print("got full response: {}".format(response))
             parsed = ET.fromstring(response)
             if parsed is None or parsed.attrib.get("val") != "good":
                 print("Error!")
