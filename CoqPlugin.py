@@ -27,7 +27,7 @@ import sublime_plugin
 
 # --------------------------------------------------------- Constants
 
-COQTOP_CMD = "/usr/local/bin/coqtop"
+COQTOP_CMD = "/usr/local/bin/coqtop.opt"
 BULLET_CHARS = { "-", "+", "*", "{", "}" }
 LTAC_START_COMMANDS = { "Definition", "Lemma", "Theorem" }
 LTAC_END_COMMANDS = { "Admitted", "Qed", "Defined" }
