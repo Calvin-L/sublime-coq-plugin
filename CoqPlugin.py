@@ -531,6 +531,6 @@ class CoqViewEventListener(sublime_plugin.EventListener):
             worker.send_req(CheckForModificationMessage)
 
     def on_close(self, view):
-        for view_id, worker in coq_threads.items():
+        for view_id, worker in list(coq_threads.items()):
             if worker.response_view.id() == view.id():
                 worker.view.run_command("coq_kill")
