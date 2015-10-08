@@ -74,6 +74,7 @@ Modifying your color scheme isn't terribly easy; I'm just going to point you at 
  - The highlighting for the proven region is really ugly. (I want some way of highlighting that colors the background without removing other syntax highlighting, but that doesn't seem possible in Sublime.)
  - Typing in the proven or TODO region can confuse the plugin
  - Comments immediately preceeding bullets (e.g. `(* hello world *) - auto.`) cause problems
- - Settings only exist for OSX
+ - Custom notations using the `.` symbol cause problems
+ - Keyboard bindings only exist for OSX
  - High-water mark sometimes gets out of sync with reality (especially during undo)
  - Feedback from `Check` and `Print` commands isn't shown in the response window
