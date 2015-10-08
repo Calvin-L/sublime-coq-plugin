@@ -1,6 +1,6 @@
 # Sublime-Coq
 
-This package provides Coq syntax highlighting and an interactive coqtop plugin for Sublime Text 3. (I guess it might work with Sublime Text 2, but I haven't tested it and I don't recommend trying it.)
+This package provides Coq syntax highlighting and an interactive coqtop plugin for Coq 8.4 and Sublime Text 3. (I guess it might work with Sublime Text 2, but I haven't tested it and I don't recommend trying it.)
 
 ## Install
 
@@ -22,7 +22,7 @@ shift+ctrl+k: kill coqtop
 
 ## Coloring
 
-By default, the "TODO" section is colored by scope "meta.coq.todo" and the "DONE" section is colored by scope "meta.coq.proven". In human terms, this means you should modify your color scheme file like so:
+By default, the "TODO" section is colored by scope "meta.coq.todo" and the "DONE" section is colored by scope "meta.coq.proven". To actually see these regions, modify your color scheme file like so:
 
 ```
 <?xml version="1.0" encoding="UTF-8"?>
@@ -69,10 +69,11 @@ Modifying your color scheme isn't terribly easy; I'm just going to point you at 
 
 ## Known Issues / TODO
 
+ - There is _zero_ support for Coq 8.5
  - There aren't really any settings available, so you might need to modify CoqPlugin.py on your own
  - The highlighting for the proven region is really ugly. (I want some way of highlighting that colors the background without removing other syntax highlighting, but that doesn't seem possible in Sublime.)
- - Typing in the proven or TODO region can confuse the plugin.
- - Comments immediately preceeding bullets (e.g. "(* hello world *) - auto.") cause problems
+ - Typing in the proven or TODO region can confuse the plugin
+ - Comments immediately preceeding bullets (e.g. `(* hello world *) - auto.`) cause problems
  - Settings only exist for OSX
  - High-water mark sometimes gets out of sync with reality (especially during undo)
  - Feedback from `Check` and `Print` commands isn't shown in the response window
