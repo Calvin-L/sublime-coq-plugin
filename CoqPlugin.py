@@ -16,6 +16,9 @@ import xml.etree.ElementTree as ET
 import sublime
 import sublime_plugin
 
+# local modules
+from . import util
+
 # relevant
 # https://sympa.inria.fr/sympa/arc/coqdev/2013-11/msg00084.html
 # https://github.com/the-lambda-church/coquille
@@ -25,9 +28,14 @@ import sublime_plugin
 # http://www.sublimetext.com/docs/3/api_reference.html
 # https://github.com/wuub/SublimeREPL/blob/master/sublimerepl.py
 
+# relevant to Coq 8.5
+# http://coq-club.inria.narkive.com/aGFS1KGj/printing-a-structured-representation-of-a-prop
+# https://github.com/coq/coq/blob/trunk/stm/stm.mli
+
 # --------------------------------------------------------- Constants
 
-COQTOP_CMD = "/usr/local/bin/coqtop.opt"
+COQTOP_CMD = ["/usr/local/bin/coqtop.opt", "-ideslave"]
+# COQTOP_CMD = ["/Users/loncaric/sources/opensource/coq/install-dir/bin/coqtop", "-main-channel", "stdfds", "-ideslave"]
 BULLET_CHARS = { "-", "+", "*", "{", "}" }
 LTAC_START_COMMANDS = { "Definition", "Lemma", "Theorem" }
 LTAC_END_COMMANDS = { "Admitted", "Qed", "Defined" }
@@ -183,27 +191,31 @@ def format_response(text, error=None):
 
     Error parameter is an optional string describing any error that took place.
     """
-    root = ET.fromstring(text)
-    if not root:
-        return "Parse failed: {}".format(text)
-    if root.attrib.get("val") != "good":
-        return "Error: {}".format(text)
-    goals = list(root.iter("goal"))
-    output = "Goals: {}\n\n".format(len(goals))
-    if goals:
-        primary_goal = goals[0]
-        strs = list(primary_goal.iter("string"))[1:]
-        hyps = strs[:-1]
-        goal = strs[-1]
-        for h in hyps:
-            output += "  {}\n".format(h.text)
-        output += "  " + ("-" * 40) + "\n"
-        output += "  {}\n".format(goal.text)
-    if error:
-        output += "\n{}".format(error.strip())
-    return output
 
-# --------------------------------------------------------- Coqtop Interaction
+    parser = util.XMLMuncher()
+    for root in parser.process(text):
+        if root.tag == "value":
+            if root.attrib.get("val") != "good":
+                return "Error: {}".format(text)
+            goals = list(root.iter("goal"))
+            output = "Goals: {}\n\n".format(len(goals))
+            if goals:
+                primary_goal = goals[0]
+                strs = list(primary_goal.iter("string"))[1:]
+                hyps = strs[:-1]
+                goal = strs[-1]
+                for h in hyps:
+                    output += "  {}\n".format(h.text)
+                output += "  " + ("-" * 40) + "\n"
+                output += "  {}\n".format(goal.text)
+            if error:
+                output += "\n{}".format(error.strip())
+            return output
+        else:
+            print("got tag '{}'".format(root))
+    raise Exception("no result")
+
+# --------------------------------------------------------- Coqtop Process
 
 class CoqtopProc(object):
 
@@ -211,9 +223,9 @@ class CoqtopProc(object):
         """
         Spawns a new coqtop process and creates pipes for interaction.
         """
-        print("Starting {} in {}".format(COQTOP_CMD, working_dir))
+        print("Starting `{}` in {}".format(" ".join(COQTOP_CMD), working_dir))
         self.proc = subprocess.Popen(
-            [COQTOP_CMD, "-ideslave"],
+            COQTOP_CMD,
             bufsize=0,
             cwd=working_dir,
             stdin=subprocess.PIPE,
