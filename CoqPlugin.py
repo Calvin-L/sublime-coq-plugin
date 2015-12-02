@@ -34,6 +34,11 @@ LTAC_END_COMMANDS = { "Admitted", "Qed", "Defined" }
 PUNCTUATION_REGEX = re.compile(r"[{}]".format(re.escape(string.punctuation)))
 REWIND_CMD = '<call val="rewind" steps="1"></call>' # multiple steps only works for ltac, so we just do one each time to be safe
 
+TODO_SCOPE_NAME = "meta.coq.todo"
+TODO_FLAGS = 0 # sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
+DONE_SCOPE_NAME = "meta.coq.proven"
+DONE_FLAGS = 0 # sublime.DRAW_SQUIGGLY_UNDERLINE | sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE
+
 # --------------------------------------------------------- Helpers
 
 def xml_encode(s):
@@ -231,10 +236,15 @@ class CoqtopProc(object):
         # Recieve until we find </value>
         s = ""
         while "</value>" not in s:
-            response = self.proc.stdout.read(1024).decode('ascii')
+            buf = self.proc.stdout.read(1024)
+            try:
+                response = buf.decode('ascii')
+            except UnicodeDecodeError as e:
+                print("{}".format(list("{:x}".format(b) for b in buf)))
+                raise e
             print("got partial response: {}".format(response))
             if not response:
-                break
+                raise Exception("coqtop died!")
             s += response
 
         print("got full response: {}".format(s))
@@ -419,12 +429,7 @@ class CoqWorker(threading.Thread):
             print("no need to go anywhere")
             return
 
-        todo_scope_name = "meta.coq.todo"
-        todo_flags = 0 # sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
-        done_scope_name = "meta.coq.proven"
-        done_flags = 0
-
-        self.view.add_regions("CoqTODO", [sublime.Region(self.coq_eval_point, idx)], scope=todo_scope_name, flags=todo_flags)
+        self.view.add_regions("CoqTODO", [sublime.Region(self.coq_eval_point, idx)], scope=TODO_SCOPE_NAME, flags=TODO_FLAGS)
         self.response_view.run_command("coq_update_output_buffer", {"text": "Working..."})
 
         cmds = []
@@ -443,7 +448,7 @@ class CoqWorker(threading.Thread):
             if cmds_to_undo:
                 idx = cmds_to_undo[0].start
                 self.view.erase_regions("Coq")
-                self.view.add_regions("Coq", [sublime.Region(0, idx)], scope=done_scope_name, flags=done_flags)
+                self.view.add_regions("Coq", [sublime.Region(0, idx)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
 
         error = None
 
@@ -458,7 +463,7 @@ class CoqWorker(threading.Thread):
                 break
             if forward:
                 self.undo_stack.push(cmd)
-                self.view.add_regions("Coq", [sublime.Region(0, cmd.end)], scope=done_scope_name, flags=done_flags)
+                self.view.add_regions("Coq", [sublime.Region(0, cmd.end)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
 
         print("asking for goal")
         response = self.coqtop.send('<call val="goal"></call>')
