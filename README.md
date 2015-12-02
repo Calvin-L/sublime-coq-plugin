@@ -78,3 +78,4 @@ Modifying your color scheme isn't terribly easy; I'm just going to point you at 
  - Keyboard bindings only exist for OSX
  - High-water mark sometimes gets out of sync with reality (especially during undo)
  - Feedback from `Check` and `Print` commands isn't shown in the response window
+ - I have no idea what happens if you duplicate the view in which you are interacting with Coq
