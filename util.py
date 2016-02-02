@@ -1,16 +1,24 @@
 import io
 import re
-import xml.etree.ElementTree as ET
 
 class XMLMuncher(object):
+    """
+    Splits a series of XML tags (e.g. <a><c/></a><b/>) into a stream
+    (e.g. '<a><c/></a>', '<b/>'). This class is intended to be used
+    to process streams of data. For instance:
+
+    xm = XMLMuncher()
+    xm.process("<b")           # no yields
+    xm.process(">hello</b>")   # yields "<b>hello</b>"
+    """
 
     # states
     START     = 0
-    IN_TAG    = 1
-    IN_STR1   = 2
-    IN_STR2   = 3
-    DEFAULT   = 4
-    START_TAG = 5
+    START_TAG = 1
+    IN_TAG    = 2
+    IN_STR1   = 3
+    IN_STR2   = 4
+    DEFAULT   = 5
 
     TRANSITIONS = {
         (START,   '<'):   (START_TAG,  1),
@@ -26,12 +34,21 @@ class XMLMuncher(object):
     WHITESPACE = re.compile(r"\s")
 
     def __init__(self):
-        self.reset()
-    def reset(self):
         self.buf = io.StringIO()
         self.state = XMLMuncher.START
         self.open_tag_count = 0
+
+    def reset(self):
+        self.buf.close()
+        self.__init__()
+
     def process(self, buf):
+        """
+        Append buf, yield any completed XML tags. This is a stateful API, so
+        callers MUST exhaust the generator before making another call to any
+        methods on this class.
+        """
+
         for char in buf:
             self.buf.write(char)
 
@@ -53,6 +70,6 @@ class XMLMuncher(object):
             self.open_tag_count += inc
             if self.state == XMLMuncher.DEFAULT and self.open_tag_count == 0:
                 xml_str = self.buf.getvalue()
-                # print("munched {}".format(xml_str))
-                yield ET.fromstring(xml_str)
+                # print("--> munched {}".format(xml_str))
+                yield xml_str.replace("&nbsp;", " ") # HACK
                 self.reset()

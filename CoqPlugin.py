@@ -31,17 +31,19 @@ from . import util
 # relevant to Coq 8.5
 # http://coq-club.inria.narkive.com/aGFS1KGj/printing-a-structured-representation-of-a-prop
 # https://github.com/coq/coq/blob/trunk/stm/stm.mli
+# https://github.com/coq/coq/blob/trunk/lib/feedback.ml
 
 # --------------------------------------------------------- Constants
 
+COQ_8_5 = True
 COQTOP_CMD = ["/usr/local/bin/coqtop.opt", "-ideslave"]
-# COQTOP_CMD = ["/Users/loncaric/sources/opensource/coq/install-dir/bin/coqtop", "-main-channel", "stdfds", "-ideslave"]
+if COQ_8_5:
+    COQTOP_CMD = ["/usr/local/bin/coqtop", "-main-channel", "stdfds", "-ideslave"]
 BULLET_CHARS = { "-", "+", "*", "{", "}" }
 LTAC_START_COMMANDS = { "Definition", "Lemma", "Theorem" }
 LTAC_END_COMMANDS = { "Admitted", "Qed", "Defined" }
 PUNCTUATION_REGEX = re.compile(r"[{}]".format(re.escape(string.punctuation)))
 REWIND_CMD = '<call val="rewind" steps="1"></call>' # multiple steps only works for ltac, so we just do one each time to be safe
-
 TODO_SCOPE_NAME = "meta.coq.todo"
 TODO_FLAGS = 0 # sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
 DONE_SCOPE_NAME = "meta.coq.proven"
@@ -179,7 +181,16 @@ def split_commands(view, start, end):
         yield cmd
         start = cmd.end + 1
 
-def format_response(text, error=None):
+# def parse_coqtop_xml(text):
+#     text = """<?xml version="1.1" ?>
+#         <!DOCTYPE naughtyxml [
+#             <!ENTITY nbsp "&#0160;">
+#             <!ENTITY copy "&#0169;">
+#         ]>
+#         <root>""" + text + "</root>"
+#     return ET.fromstring(text)
+
+def format_response(xml, error=None):
     """
     Takes XML output from coqtop and makes it clean and pretty. Sample input:
     <value val="good"><option val="some"><goals><list><goal><string>14</string><list><string>n : nat</string></list><string>{rs : list record_name |
@@ -192,12 +203,11 @@ def format_response(text, error=None):
     Error parameter is an optional string describing any error that took place.
     """
 
-    parser = util.XMLMuncher()
-    for root in parser.process(text):
-        if root.tag == "value":
-            if root.attrib.get("val") != "good":
-                return "Error: {}".format(text)
-            goals = list(root.iter("goal"))
+    for x in xml:
+        if x.tag == "value":
+            if x.attrib.get("val") != "good":
+                return "Error: {}".format(x.text)
+            goals = list(x.iter("goal"))
             output = "Goals: {}\n\n".format(len(goals))
             if goals:
                 primary_goal = goals[0]
@@ -212,8 +222,7 @@ def format_response(text, error=None):
                 output += "\n{}".format(error.strip())
             return output
         else:
-            print("got tag '{}'".format(root))
-    raise Exception("no result")
+            print("got tag '{}'".format(x))
 
 # --------------------------------------------------------- Coqtop Process
 
@@ -223,9 +232,17 @@ class CoqtopProc(object):
         """
         Spawns a new coqtop process and creates pipes for interaction.
         """
-        print("Starting `{}` in {}".format(" ".join(COQTOP_CMD), working_dir))
+
+        cmd = list(COQTOP_CMD)
+
+        project_file = os.path.join(working_dir, "_CoqProject")
+        if os.path.isfile(project_file):
+            with open(project_file, "r") as f:
+                cmd += f.read().split()
+
+        print("Starting `{}` in {}".format(" ".join(cmd), working_dir))
         self.proc = subprocess.Popen(
-            COQTOP_CMD,
+            cmd,
             bufsize=0,
             cwd=working_dir,
             stdin=subprocess.PIPE,
@@ -233,8 +250,8 @@ class CoqtopProc(object):
 
     def send(self, text):
         """
-        Send the given text to coqtop and wait for a full response. Returns
-        the response text.
+        Send the given text to coqtop. Yields XML tags found in the response.
+        For proper operation, clients must always exhaust this generator.
         """
 
         if text[-1] != "\n":
@@ -245,22 +262,24 @@ class CoqtopProc(object):
         self.proc.stdin.write(text.encode('ascii'))
         self.proc.stdin.flush()
 
-        # Recieve until we find </value>
-        s = ""
-        while "</value>" not in s:
+        # Recieve until we find <value>...</value>
+        xm = util.XMLMuncher()
+        done = False
+        while not done:
             buf = self.proc.stdout.read(1024)
             try:
                 response = buf.decode('ascii')
             except UnicodeDecodeError as e:
                 print("{}".format(list("{:x}".format(b) for b in buf)))
                 raise e
-            print("got partial response: {}".format(response))
+            # print("got partial response: {}".format(response))
             if not response:
                 raise Exception("coqtop died!")
-            s += response
-
-        print("got full response: {}".format(s))
-        return s
+            for tag in xm.process(response):
+                xml = ET.fromstring(tag)
+                yield xml
+                if xml.tag == "value":
+                    done = True
 
     def stop(self):
         """
@@ -281,6 +300,7 @@ class UndoStack(object):
 
     def __init__(self):
         self.stack = []
+        self.state_ids = []
 
     def most_recent(self, ty):
         """
@@ -294,8 +314,8 @@ class UndoStack(object):
             i += 1
         return None
 
-    def push(self, cmd):
-        if isinstance(cmd, LtacEndCommand):
+    def push(self, cmd, state_id=None):
+        if isinstance(cmd, LtacEndCommand) and not COQ_8_5:
             # search backwards for the LtacStartCommand
             idx = self.most_recent(LtacStartCommand)
             if idx:
@@ -310,6 +330,8 @@ class UndoStack(object):
             else:
                 print("Insanity: got an Ltac end command with no start!?")
         self.stack.append(cmd)
+        if state_id is not None:
+            self.state_ids.append(state_id)
 
     def rewind_to(self, index):
         """
@@ -326,9 +348,11 @@ class UndoStack(object):
                 to_undo.append(cmd)
             else:
                 break
-        self.stack = self.stack[:(len(self.stack) - len(to_undo))]
+        new_end_idx = len(self.stack) - len(to_undo)
+        self.stack = self.stack[:new_end_idx]
+        self.state_ids = self.state_ids[:new_end_idx]
         to_undo.reverse()
-        return to_undo
+        return (to_undo, self.state_ids[-1] if self.state_ids else 1)
 
 # --------------------------------------------------------- Coq Worker
 
@@ -449,36 +473,67 @@ class CoqWorker(threading.Thread):
         forward = idx > self.coq_eval_point
         if forward:
             for cmd in split_commands(self.view, self.coq_eval_point, idx):
-                to_send = '<call val="interp" id="0">{}</call>'.format(xml_encode(cmd.text.strip()))
+                if COQ_8_5:
+                    to_send = '<call val="Interp"><pair><pair><bool val="false"/><bool val="false"/></pair><string>{}</string></pair></call>'.format(xml_encode(cmd.text.strip()))
+                else:
+                    to_send = '<call val="interp" id="0">{}</call>'.format(xml_encode(cmd.text.strip()))
                 cmds.append((to_send, cmd))
         else:
-            cmds_to_undo = self.undo_stack.rewind_to(idx)
-            print("Undoing {} things...".format(len(cmds_to_undo)))
-            for cmd in cmds_to_undo:
-                print("Undoing {}".format(cmd.text.strip()))
-                cmds.append((REWIND_CMD, None))
-            if cmds_to_undo:
-                idx = cmds_to_undo[0].start
-                self.view.erase_regions("Coq")
-                self.view.add_regions("Coq", [sublime.Region(0, idx)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
+            (cmds_to_undo, state_to_rewind_to) = self.undo_stack.rewind_to(idx)
+            if COQ_8_5:
+                if cmds_to_undo:
+                    cmd = cmds_to_undo[0]
+                    print("Rewinding to state {}...".format(state_to_rewind_to))
+                    cmds.append(('<call val="Edit_at"><state_id val="{}"/></call>'.format(state_to_rewind_to), None))
+                    idx = cmd.start
+            else:
+                print("Undoing {} things...".format(len(cmds_to_undo)))
+                for cmd in cmds_to_undo:
+                    print("Undoing {}".format(cmd.text.strip()))
+                    cmds.append((REWIND_CMD, None))
+                if cmds_to_undo:
+                    idx = cmds_to_undo[0].start
+            self.view.erase_regions("Coq")
+            self.view.add_regions("Coq", [sublime.Region(0, idx)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
 
         error = None
 
+        def pr(e, depth=0):
+            print("{}{} [text={}]".format(" " * depth, e, e.text))
+            if e:
+                for x in e:
+                    pr(x, depth + 2)
+
+        stop = False
         for coq_cmd, cmd in cmds:
-            response = self.coqtop.send(coq_cmd)
-            parsed = ET.fromstring(response)
-            if parsed is None or parsed.attrib.get("val") != "good":
-                print("Error!")
-                error = parsed.text
-                if cmd:
-                    idx = cmd.start
+            if stop:
                 break
-            if forward:
-                self.undo_stack.push(cmd)
-                self.view.add_regions("Coq", [sublime.Region(0, cmd.end)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
+            for parsed in self.coqtop.send(coq_cmd):
+                if parsed.tag != "value":
+                    continue
+                if parsed.attrib.get("val") != "good":
+                    print("Error!")
+                    pr(parsed)
+                    error = "".join(parsed.itertext()).strip() # WTF ETree API?!?
+                    if cmd:
+                        idx = cmd.start
+                    stop = True
+                    break
+                if forward:
+                    state_id = None
+                    if COQ_8_5:
+                        # pr(parsed)
+                        # pr(parsed.find(".//state_id"))
+                        state_id = int(parsed.find(".//state_id").attrib.get("val"))
+                        # print(state_id)
+                    self.undo_stack.push(cmd, state_id=state_id)
+                    self.view.add_regions("Coq", [sublime.Region(0, cmd.end)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
 
         print("asking for goal")
-        response = self.coqtop.send('<call val="goal"></call>')
+        if COQ_8_5:
+            response = self.coqtop.send('<call val="Goal"><unit/></call>')
+        else:
+            response = self.coqtop.send('<call val="goal"></call>')
         response = format_response(response, error)
         self.response_view.run_command("coq_update_output_buffer", {"text": response})
         self.view.window().focus_view(self.view)
