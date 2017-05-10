@@ -193,6 +193,9 @@ def split_commands(view, start, end):
 #         <root>""" + text + "</root>"
 #     return ET.fromstring(text)
 
+def text_of(xml):
+    return "".join(xml.itertext())
+
 def format_response(xml, error=None):
     """
     Takes XML output from coqtop and makes it clean and pretty. Sample input:
@@ -214,13 +217,13 @@ def format_response(xml, error=None):
             output = "Goals: {}\n\n".format(len(goals))
             if goals:
                 primary_goal = goals[0]
-                strs = list(primary_goal.iter("string"))[1:]
+                strs = list(primary_goal.iter("richpp"))
                 hyps = strs[:-1]
                 goal = strs[-1]
                 for h in hyps:
-                    output += "  {}\n".format(h.text)
+                    output += "  {}\n".format(text_of(h))
                 output += "  " + ("-" * 40) + "\n"
-                output += "  {}\n".format(goal.text)
+                output += "  {}\n".format(text_of(goal))
             if error:
                 output += "\n{}".format(error.strip())
             return output
