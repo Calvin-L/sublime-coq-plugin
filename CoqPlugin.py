@@ -94,10 +94,13 @@ LtacEndCommand = collections.namedtuple("LtacEndCommand", COMMAND_FIELDS)
 # everything else: vernacular, ltac, etc.
 NormalCommand = collections.namedtuple("NormalCommand", COMMAND_FIELDS)
 
-def coq_command_end_filter(view, start=0):
+def coq_command_end_filter(s, view, start=0):
     def filt(i):
         scope_name = view.scope_name(i + start)
-        return "coq" in scope_name and not ("comment" in scope_name or "string" in scope_name)
+        return (
+            "coq" in scope_name
+            and not ("comment" in scope_name or "string" in scope_name)
+            and (i + 1 >= len(s) or s[i + 1] in string.whitespace))
     return filt
 
 def prev_command(view, end=0):
@@ -109,7 +112,7 @@ def prev_command(view, end=0):
     sure we only have to worry about command boundaries at fullstops.
     """
     s = view.substr(sublime.Region(0, end))
-    return find_index(s, ".", coq_command_end_filter(view), forward=False)
+    return find_index(s, ".", coq_command_end_filter(s, view), forward=False)
 
 def parse_command(index, text):
     """
@@ -136,7 +139,7 @@ def next_command_text(view, start=0):
     Returns (None, None) if there are no more commands or if parsing fails.
     """
     s = view.substr(sublime.Region(start, view.size()))
-    idx = find_index(s, ".", coq_command_end_filter(view, start))
+    idx = find_index(s, ".", coq_command_end_filter(s, view, start))
     if not idx:
         return (None, None)
     idx += start
@@ -515,6 +518,8 @@ class CoqWorker(threading.Thread):
                     print("Error!")
                     pr(parsed)
                     error = "".join(parsed.itertext()).strip() # WTF ETree API?!?
+                    if not error:
+                        error = "(unknown error)"
                     if cmd:
                         idx = cmd.start
                     stop = True
