@@ -241,10 +241,11 @@ class CoqtopProc(object):
 
         cmd = list(COQTOP_CMD)
 
-        project_file = os.path.join(working_dir, "_CoqProject")
-        if os.path.isfile(project_file):
-            with open(project_file, "r") as f:
-                cmd += f.read().split()
+        if working_dir is not None:
+            project_file = os.path.join(working_dir, "_CoqProject")
+            if os.path.isfile(project_file):
+                with open(project_file, "r") as f:
+                    cmd += f.read().split()
 
         print("Starting `{}` in {}".format(" ".join(cmd), working_dir))
         self.proc = subprocess.Popen(
