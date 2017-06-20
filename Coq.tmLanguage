@@ -36,7 +36,7 @@
 
         <dict>
             <key>match</key>
-            <string>\b(Require|Import|Export|Local|Open|Scope)\b</string>
+            <string>\b(Require|Import|Export|Local|Open|Scope|Goal)\b</string>
             <key>comment</key>
             <string>Vernacular import keywords</string>
             <key>name</key>
