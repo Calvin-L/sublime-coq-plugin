@@ -69,7 +69,7 @@ Modifying your color scheme isn't terribly easy; I'm just going to point you at 
 
 ## Known Issues / TODO
 
- - There is _zero_ support for Coq 8.5
+ - Only supports Coq 8.5
  - There aren't really any settings available, so you might need to modify CoqPlugin.py on your own
  - The highlighting for the proven region is really ugly. (I want some way of highlighting that colors the background without removing other syntax highlighting, but that doesn't seem possible in Sublime.)
  - Typing in the proven or TODO region can confuse the plugin
@@ -77,5 +77,5 @@ Modifying your color scheme isn't terribly easy; I'm just going to point you at 
  - Custom notations using the `.` symbol cause problems
  - Keyboard bindings only exist for OSX
  - High-water mark sometimes gets out of sync with reality (especially during undo)
- - Feedback from `Check` and `Print` commands isn't shown in the response window
+ - Feedback from commands `Check`, `Print`, `Search`, etc. is not shown in the response window
  - I have no idea what happens if you duplicate the view in which you are interacting with Coq
