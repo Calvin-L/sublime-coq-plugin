@@ -20,53 +20,6 @@ ctrl+enter: evaluate to (or rewind to) the current cursor
 shift+ctrl+k: kill coqtop
 ```
 
-## Coloring
-
-By default, the "TODO" section is colored by scope "meta.coq.todo" and the "DONE" section is colored by scope "meta.coq.proven". To actually see these regions, modify your color scheme file like so:
-
-```
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>name</key>
-    <string>(name for your color scheme)</string>
-    <key>settings</key>
-    <array>
-
-        <!-- ########## BEGIN ADDITIONS -->
-
-        <dict>
-            <key>name</key>
-            <string>Coq TODO</string>
-            <key>scope</key>
-            <string>meta.coq.todo</string>
-            <key>settings</key>
-            <dict>
-                <key>background</key>
-                <string>#563A28</string>
-            </dict>
-        </dict>
-
-        <dict>
-            <key>name</key>
-            <string>Coq high-water mark</string>
-            <key>scope</key>
-            <string>meta.coq.proven</string>
-            <key>settings</key>
-            <dict>
-                <key>background</key>
-                <string>#365A28</string>
-            </dict>
-        </dict>
-
-        <!-- ########## END ADDITIONS -->
-```
-
-(Of course, you may want to change the style settings to match your color scheme and taste.)
-
-Modifying your color scheme isn't terribly easy; I'm just going to point you at [this StackOverflow question](https://stackoverflow.com/questions/18746993/how-do-i-edit-the-solarized-light-theme-in-sublime-text-3) and let you figure out the rest.
-
 ## Known Issues / TODO
 
  - Only known to work in Coq 8.6+
