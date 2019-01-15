@@ -5,6 +5,7 @@ Sublime Text 3 plugin for Coq.
 # builtin modules
 import collections
 import os.path
+import queue
 import re
 import shlex
 import string
@@ -482,9 +483,7 @@ class CoqWorker(threading.Thread):
 
     def __init__(self, view):
         super().__init__(daemon=True)
-        self.lock = threading.Lock()
-        self.lock.acquire()
-        self.request = None
+        self.request_queue = queue.Queue()
         self.view = view
         self.coq_eval_point = 0
         working_dir = None
@@ -500,13 +499,17 @@ class CoqWorker(threading.Thread):
         self.display.close()
 
     def send_req(self, req):
-        self.request = req
-        if not self.lock.acquire(blocking=False):
-            self.lock.release()
+        self.request_queue.put_nowait(req)
 
     def get_req(self):
-        self.lock.acquire()
-        return self.request
+        """Get the most recent request (skipping all others)"""
+        res = self.request_queue.get(block=True)
+        while True:
+            try:
+                res = self.request_queue.get_nowait()
+            except queue.Empty:
+                break
+        return res
 
     def run(self):
         while True:
