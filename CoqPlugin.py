@@ -454,6 +454,9 @@ class SplitPaneDisplay(CoqDisplay):
         return self.response_view.window() is None
 
     def close(self):
+        sublime.set_timeout(self._cleanup, 0)
+
+    def _cleanup(self):
         self.view.erase_regions("Coq")
         self.view.erase_regions("CoqTODO")
 
@@ -463,6 +466,7 @@ class SplitPaneDisplay(CoqDisplay):
         if window is not None:
             window.focus_view(response_view)
             window.run_command("close")
+            window.focus_view(self.view)
 
 # --------------------------------------------------------- Coq Worker
 
