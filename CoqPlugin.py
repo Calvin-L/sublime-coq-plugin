@@ -494,8 +494,10 @@ class InlinePhantomDisplay(CoqDisplay):
         return """
         <body id="coq-goal-phantom">
             <style>
+                html {{ background-color: color(black alpha(0.25)); }}
+                div.coq-goal {{ padding: 0.5rem; }}
             </style>
-            <div class="coq-goal"><br>{goal}<br></div>
+            <div class="coq-goal">{goal}</div>
         </body>
         """.format(goal=goal)
 
@@ -510,15 +512,16 @@ class InlinePhantomDisplay(CoqDisplay):
         """
 
     def show_goal(self, goal):
-        pos = self.region.end()
-        region = sublime.Region(pos, pos)
+        marker_pos = self.region.end()
+        marker_region = sublime.Region(marker_pos, marker_pos)
+        goal_pos = self.view.line(marker_region).begin()
         self.phantoms.update([
             sublime.Phantom(
-                region=region,
+                region=marker_region,
                 content=self.inline_marker(),
                 layout=sublime.LAYOUT_INLINE),
             sublime.Phantom(
-                region=region,
+                region=sublime.Region(goal_pos, goal_pos),
                 content=self.format_goal(goal),
                 layout=sublime.LAYOUT_BELOW)])
 
