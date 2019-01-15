@@ -43,17 +43,22 @@ from . import util
 #     "-main-channel", "stdfds", "-ideslave",
 #     ]
 COQ_MAJOR_VERSION = (8,7)
-COQTOP_CMD = ["/usr/local/bin/coqtop.opt", "-ideslave"]
+COQTOP_PATH = "/usr/local/bin/"
+COQTOP_CMD = [COQTOP_PATH + "coqtop.opt", "-ideslave"]
 if COQ_MAJOR_VERSION >= (8,5):
     COQTOP_CMD = [
         # "/Users/loncaric/sources/epics/neutrons/coq/build/bin/coqtop",
-        "/usr/local/bin/coqtop",
+        COQTOP_PATH + "coqtop.opt",
         "-main-channel", "stdfds", "-ideslave",
         # "-R", "/Users/loncaric/sources/epics/neutrons/python", "",
         # "-R", "/Users/loncaric/sources/vhttp/src", "",
         # "-R", "/Users/loncaric/sources/epics/neutrons/semantics", "",
         # "-R", "/Users/loncaric/sources/epics/neutrons/python/flocq-2.5.1/src", "Flocq",
         ]
+if COQ_MAJOR_VERSION >= (8,9):
+    COQTOP_CMD = [
+        COQTOP_PATH + "coqidetop.opt",
+        "-main-channel", "stdfds"]
 BULLET_CHARS = { "-", "+", "*", "{", "}" }
 LTAC_START_COMMANDS = { "Definition", "Lemma", "Theorem" }
 LTAC_END_COMMANDS = { "Admitted", "Qed", "Defined" }
