@@ -404,6 +404,66 @@ class UndoStack(object):
         """
         return self.state_ids[-1] if self.state_ids else 1
 
+# --------------------------------------------------------- Feedback Display
+
+class CoqDisplay(object):
+    def __init__(self, view):
+        self.view = view
+    def set_marks(self, high_water_mark, todo_mark):
+        raise NotImplementedError()
+    def show_goal(self, goal):
+        raise NotImplementedError()
+    def was_closed_by_user(self):
+        raise NotImplementedError()
+    def close(self):
+        raise NotImplementedError()
+
+class SplitPaneDisplay(CoqDisplay):
+    def __init__(self, view):
+        super().__init__(view)
+        self.response_view = view.window().new_file()
+        self.response_view.set_syntax_file("Packages/sublime-coq/Coq.tmLanguage")
+        self.response_view.set_scratch(True)
+        self.response_view.set_read_only(True)
+        name = view.name() or os.path.basename(view.file_name() or "")
+        title = "*** Coq for {} ***".format(name) if name else "*** Coq ***"
+        self.response_view.set_name(title)
+
+        window = view.window()
+        ngroups = window.num_groups()
+        if ngroups == 1:
+            window.run_command("new_pane")
+        else:
+            group = window.num_groups() - 1
+            if window.get_view_index(view)[1] == group:
+                group -= 1
+            window.set_view_index(self.response_view, group, 0)
+        window.focus_view(view)
+
+    def set_marks(self, high_water_mark, todo_mark):
+        self.view.add_regions("Coq", [sublime.Region(0, high_water_mark)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
+        if todo_mark > high_water_mark:
+            self.view.add_regions("CoqTODO", [sublime.Region(high_water_mark, todo_mark)], scope=TODO_SCOPE_NAME, flags=TODO_FLAGS)
+        else:
+            self.view.erase_regions("CoqTODO")
+
+    def show_goal(self, goal):
+        self.response_view.run_command("coq_update_output_buffer", {"text": goal})
+
+    def was_closed_by_user(self):
+        return self.response_view.window() is None
+
+    def close(self):
+        self.view.erase_regions("Coq")
+        self.view.erase_regions("CoqTODO")
+
+        # clean up the response view if it still exists
+        response_view = self.response_view
+        window = response_view.window()
+        if window is not None:
+            window.focus_view(response_view)
+            window.run_command("close")
+
 # --------------------------------------------------------- Coq Worker
 
 # maps view IDs to worker threads
@@ -424,37 +484,16 @@ class CoqWorker(threading.Thread):
         self.view = view
         self.coq_eval_point = 0
         working_dir = None
-        f = self.view.file_name()
+        f = view.file_name()
         if f is not None:
             working_dir = os.path.dirname(f)
         self.coqtop = CoqtopProc(working_dir=working_dir)
-        self.response_view = self.view.window().new_file()
         self.undo_stack = UndoStack()
-        self._on_start()
-
-    def _on_start(self):
-        self.response_view.set_syntax_file("Packages/sublime-coq/Coq.tmLanguage")
-        self.response_view.set_scratch(True)
-        self.response_view.set_read_only(True)
-        name = self.view.name() or os.path.basename(self.view.file_name() or "")
-        title = "*** Coq for {} ***".format(name) if name else "*** Coq ***"
-        self.response_view.set_name(title)
-
-        window = self.view.window()
-        ngroups = window.num_groups()
-        if ngroups == 1:
-            window.run_command("new_pane")
-        else:
-            group = window.num_groups() - 1
-            if window.get_view_index(self.view)[1] == group:
-                group -= 1
-            window.set_view_index(self.response_view, group, 0)
-        window.focus_view(self.view)
+        self.display = SplitPaneDisplay(view)
 
     def _on_stop(self):
         self.coqtop.stop()
-        self.view.erase_regions("Coq")
-        self.view.erase_regions("CoqTODO")
+        self.display.close()
 
     def send_req(self, req):
         self.request = req
@@ -499,8 +538,8 @@ class CoqWorker(threading.Thread):
         """
         Set coq evaluation to idx in the given buffer.
         """
-        if not self.response_view.window():
-            print("worker {} has no more response buffer; stopping")
+        if self.display.was_closed_by_user():
+            print("worker {}'s display was closed; stopping")
             self._on_stop()
             return
 
@@ -514,8 +553,8 @@ class CoqWorker(threading.Thread):
             print("no need to go anywhere")
             return
 
-        self.view.add_regions("CoqTODO", [sublime.Region(self.coq_eval_point, idx)], scope=TODO_SCOPE_NAME, flags=TODO_FLAGS)
-        self.response_view.run_command("coq_update_output_buffer", {"text": "Working..."})
+        self.display.show_goal("Working...")
+        self.display.set_marks(min(idx, self.coq_eval_point), idx)
 
         cmds = []
         state_id = self.undo_stack.state_id_of_tip()
@@ -548,8 +587,7 @@ class CoqWorker(threading.Thread):
                     cmds.append((REWIND_CMD, None))
                 if cmds_to_undo:
                     idx = cmds_to_undo[0].start
-            self.view.erase_regions("Coq")
-            self.view.add_regions("Coq", [sublime.Region(0, idx)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
+            self.display.set_marks(idx, idx)
 
         error = None
 
@@ -586,7 +624,7 @@ class CoqWorker(threading.Thread):
                         state_id = int(parsed.find(".//state_id").attrib.get("val"))
                         # print("GOT STATE ID: {}".format(state_id))
                     self.undo_stack.push(cmd, state_id=state_id)
-                    self.view.add_regions("Coq", [sublime.Region(0, cmd.end)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
+                    self.display.set_marks(cmd.end, cmd.end)
 
         print("asking for goal")
         if COQ_MAJOR_VERSION >= (8,5):
@@ -594,15 +632,19 @@ class CoqWorker(threading.Thread):
         else:
             response = self.coqtop.send('<call val="goal"></call>')
         response = format_response(response, error)
-        self.response_view.run_command("coq_update_output_buffer", {"text": response})
-        self.view.window().focus_view(self.view)
-        self.view.erase_regions("CoqTODO")
+        self.display.show_goal(response)
+        # self.response_view.run_command("coq_update_output_buffer", {"text": response})
+        # self.view.window().focus_view(self.view)
+        # self.view.erase_regions("CoqTODO")
         self.coq_eval_point = idx
 
 # --------------------------------------------------------- Sublime Commands
 
 class CoqCommand(sublime_plugin.TextCommand):
     def run(self, edit):
+        print(self.view.style_for_scope(DONE_SCOPE_NAME))
+        # return
+
         if "coq" not in self.view.scope_name(0):
             print("not inside a coq buffer")
             return
@@ -620,6 +662,7 @@ class CoqKillCommand(sublime_plugin.TextCommand):
         worker_key = self.view.id()
         worker = coq_threads.get(worker_key, None)
         if worker:
+            print("stopping {}...".format(worker))
             worker.send_req(StopMessage)
             worker.join(1)
             if not worker.is_alive():
@@ -627,18 +670,8 @@ class CoqKillCommand(sublime_plugin.TextCommand):
                 print("killed {}".format(worker))
             else:
                 print("worker didn't die!")
-
-            # clean up the response view if it still exists
-            response_view = worker.response_view
-            window = response_view.window()
-            if window is not None:
-                window.focus_view(response_view)
-                window.run_command("close")
-
         else:
             print("no worker to kill")
-            self.view.erase_regions("Coq")
-            self.view.erase_regions("CoqTODO")
 
 class CoqUpdateOutputBufferCommand(sublime_plugin.TextCommand):
     def run(self, edit, text=""):
@@ -663,5 +696,6 @@ class CoqViewEventListener(sublime_plugin.EventListener):
 
     def on_close(self, view):
         for view_id, worker in list(coq_threads.items()):
-            if worker.response_view.id() == view.id():
+            if worker.display.was_closed_by_user():
+                print("worker {} was closed??".format(worker))
                 worker.view.run_command("coq_kill")
