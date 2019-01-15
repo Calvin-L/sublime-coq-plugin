@@ -469,6 +469,70 @@ class SplitPaneDisplay(CoqDisplay):
             window.run_command("close")
             window.focus_view(self.view)
 
+class InlinePhantomDisplay(CoqDisplay):
+    def __init__(self, view):
+        super().__init__(view)
+        self.phantoms = sublime.PhantomSet(view, "CoqPhantoms")
+        self.region = sublime.Region(0, 0)
+
+    def set_marks(self, high_water_mark, todo_mark):
+        self.region = region = sublime.Region(0, high_water_mark)
+        self.view.add_regions("Coq", [region], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
+        if todo_mark > high_water_mark:
+            self.view.add_regions("CoqTODO", [sublime.Region(high_water_mark, todo_mark)], scope=TODO_SCOPE_NAME, flags=TODO_FLAGS)
+        else:
+            self.view.erase_regions("CoqTODO")
+
+    def format_goal(self, goal):
+        goal = (goal
+            .strip()
+            .replace("&", "&amp;")
+            .replace(" ", "&nbsp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\n", "<br>"))
+        return """
+        <body id="coq-goal-phantom">
+            <style>
+            </style>
+            <div class="coq-goal"><br>{goal}<br></div>
+        </body>
+        """.format(goal=goal)
+
+    def inline_marker(self):
+        return """
+        <body id="coq-highwater-phantom">
+            <style>
+                span.coq-highwater { color: red; }
+            </style>
+            <span class="coq-highwater">#</span>
+        </body>
+        """
+
+    def show_goal(self, goal):
+        pos = self.region.end()
+        region = sublime.Region(pos, pos)
+        self.phantoms.update([
+            sublime.Phantom(
+                region=region,
+                content=self.inline_marker(),
+                layout=sublime.LAYOUT_INLINE),
+            sublime.Phantom(
+                region=region,
+                content=self.format_goal(goal),
+                layout=sublime.LAYOUT_BELOW)])
+
+    def was_closed_by_user(self):
+        return False
+
+    def close(self):
+        sublime.set_timeout(self._cleanup, 0)
+
+    def _cleanup(self):
+        self.view.erase_regions("Coq")
+        self.view.erase_regions("CoqTODO")
+        self.phantoms.update([])
+
 # --------------------------------------------------------- Coq Worker
 
 # maps view IDs to worker threads
@@ -492,7 +556,7 @@ class CoqWorker(threading.Thread):
             working_dir = os.path.dirname(f)
         self.coqtop = CoqtopProc(working_dir=working_dir)
         self.undo_stack = UndoStack()
-        self.display = SplitPaneDisplay(view)
+        self.display = InlinePhantomDisplay(view)
 
     def _on_stop(self):
         self.coqtop.stop()
