@@ -1,10 +1,10 @@
 # Sublime-Coq
 
-This package provides Coq syntax highlighting and an interactive coqtop plugin for Coq 8.4 and Sublime Text 3. (I guess it might work with Sublime Text 2, but I haven't tested it and I don't recommend trying it.)
+This package provides Coq syntax highlighting and an interactive coqtop plugin for Coq 8.6+ and Sublime Text 3. (I guess it might work with Sublime Text 2, but I haven't tested it and I don't recommend trying it.)
 
 ## Install
 
-There is [a different sublime-coq plugin](https://github.com/mkolosick/Sublime-Coq) in [Package Control](https://sublime.wbond.net/). That is NOT this one. This one is better. Even if it does have some problems (see "Known Issues" below).
+There is [a different sublime-coq plugin](https://packagecontrol.io/packages/Coq) in [Package Control](https://sublime.wbond.net/). That is NOT this one. This one is different.
 
 ```
 cd 'sublime-text-folder/Packages'
