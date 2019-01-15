@@ -6,6 +6,7 @@ Sublime Text 3 plugin for Coq.
 import collections
 import os.path
 import re
+import shlex
 import string
 import subprocess
 import threading
@@ -35,10 +36,23 @@ from . import util
 
 # --------------------------------------------------------- Constants
 
-COQ_8_5 = True
+# COQ_MAJOR_VERSION = (8,5)
+# COQTOP_CMD = [
+#     "/Users/loncaric/sources/epics/neutrons/coq/build/bin/coqtop",
+#     "-main-channel", "stdfds", "-ideslave",
+#     ]
+COQ_MAJOR_VERSION = (8,7)
 COQTOP_CMD = ["/usr/local/bin/coqtop.opt", "-ideslave"]
-if COQ_8_5:
-    COQTOP_CMD = ["/usr/local/bin/coqtop", "-main-channel", "stdfds", "-ideslave"]
+if COQ_MAJOR_VERSION >= (8,5):
+    COQTOP_CMD = [
+        # "/Users/loncaric/sources/epics/neutrons/coq/build/bin/coqtop",
+        "/usr/local/bin/coqtop",
+        "-main-channel", "stdfds", "-ideslave",
+        # "-R", "/Users/loncaric/sources/epics/neutrons/python", "",
+        # "-R", "/Users/loncaric/sources/vhttp/src", "",
+        # "-R", "/Users/loncaric/sources/epics/neutrons/semantics", "",
+        # "-R", "/Users/loncaric/sources/epics/neutrons/python/flocq-2.5.1/src", "Flocq",
+        ]
 BULLET_CHARS = { "-", "+", "*", "{", "}" }
 LTAC_START_COMMANDS = { "Definition", "Lemma", "Theorem" }
 LTAC_END_COMMANDS = { "Admitted", "Qed", "Defined" }
@@ -48,6 +62,7 @@ TODO_SCOPE_NAME = "meta.coq.todo"
 TODO_FLAGS = 0 # sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
 DONE_SCOPE_NAME = "meta.coq.proven"
 DONE_FLAGS = 0 # sublime.DRAW_SQUIGGLY_UNDERLINE | sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE
+RICHPP = (COQ_MAJOR_VERSION >= (8,6)) # newer versions of Coq (8.6+?) need this
 
 # --------------------------------------------------------- Helpers
 
@@ -212,12 +227,17 @@ def format_response(xml, error=None):
     for x in xml:
         if x.tag == "value":
             if x.attrib.get("val") != "good":
-                return "Error: {}".format(x.text)
+                return "Error: {}".format(text_of(x))
             goals = list(x.iter("goal"))
             output = "Goals: {}\n\n".format(len(goals))
             if goals:
+                # from xml import etree
+                # print("\n".join(ET.tostring(g).decode("UTF-8") for g in goals))
                 primary_goal = goals[0]
-                strs = list(primary_goal.iter("richpp"))
+                if RICHPP:
+                    strs = list(primary_goal.iter("richpp"))
+                else:
+                    strs = list(primary_goal.iter("string"))[1:]
                 hyps = strs[:-1]
                 goal = strs[-1]
                 for h in hyps:
@@ -242,10 +262,11 @@ class CoqtopProc(object):
         cmd = list(COQTOP_CMD)
 
         if working_dir is not None:
-            project_file = os.path.join(working_dir, "_CoqProject")
-            if os.path.isfile(project_file):
+            project_file = self.find_coqproject_file(working_dir)
+            if project_file is not None:
+                working_dir = os.path.dirname(project_file)
                 with open(project_file, "r") as f:
-                    cmd += f.read().split()
+                    cmd.extend(shlex.split(f.read()))
 
         print("Starting `{}` in {}".format(" ".join(cmd), working_dir))
         self.proc = subprocess.Popen(
@@ -254,6 +275,18 @@ class CoqtopProc(object):
             cwd=working_dir,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE)
+
+    def find_coqproject_file(self, dir):
+        if dir.endswith("/"):
+            dir = dir[:-1]
+        if not dir:
+            return None
+        project_file = os.path.join(dir, "_CoqProject")
+        if os.path.isfile(project_file):
+            return project_file
+        if dir != "/":
+            return self.find_coqproject_file(os.path.dirname(dir))
+        return None
 
     def send(self, text):
         """
@@ -268,6 +301,7 @@ class CoqtopProc(object):
         # Send
         self.proc.stdin.write(text.encode('ascii'))
         self.proc.stdin.flush()
+        # print("sent")
 
         # Recieve until we find <value>...</value>
         xm = util.XMLMuncher()
@@ -287,6 +321,7 @@ class CoqtopProc(object):
                 yield xml
                 if xml.tag == "value":
                     done = True
+                    # print("--- DONE ---")
 
     def stop(self):
         """
@@ -322,7 +357,7 @@ class UndoStack(object):
         return None
 
     def push(self, cmd, state_id=None):
-        if isinstance(cmd, LtacEndCommand) and not COQ_8_5:
+        if isinstance(cmd, LtacEndCommand) and COQ_MAJOR_VERSION < (8,5):
             # search backwards for the LtacStartCommand
             idx = self.most_recent(LtacStartCommand)
             if idx:
@@ -360,6 +395,12 @@ class UndoStack(object):
         self.state_ids = self.state_ids[:new_end_idx]
         to_undo.reverse()
         return (to_undo, self.state_ids[-1] if self.state_ids else 1)
+
+    def state_id_of_tip(self):
+        """
+        Returns the most recent state id.
+        """
+        return self.state_ids[-1] if self.state_ids else 1
 
 # --------------------------------------------------------- Coq Worker
 
@@ -476,18 +517,24 @@ class CoqWorker(threading.Thread):
         self.response_view.run_command("coq_update_output_buffer", {"text": "Working..."})
 
         cmds = []
+        state_id = self.undo_stack.state_id_of_tip()
 
         forward = idx > self.coq_eval_point
         if forward:
             for cmd in split_commands(self.view, self.coq_eval_point, idx):
-                if COQ_8_5:
+                if COQ_MAJOR_VERSION >= (8,7):
+                    to_send = '<call val="Add"><pair><pair><string>{cmd}</string><int>1</int></pair><pair><state_id val="{state_id}"/><bool val="false"/></pair></pair></call>'.format(
+                        cmd=xml_encode(cmd.text.strip()),
+                        state_id=state_id)
+                elif COQ_MAJOR_VERSION >= (8,5):
                     to_send = '<call val="Interp"><pair><pair><bool val="false"/><bool val="false"/></pair><string>{}</string></pair></call>'.format(xml_encode(cmd.text.strip()))
                 else:
                     to_send = '<call val="interp" id="0">{}</call>'.format(xml_encode(cmd.text.strip()))
                 cmds.append((to_send, cmd))
+                state_id += 1
         else:
             (cmds_to_undo, state_to_rewind_to) = self.undo_stack.rewind_to(idx)
-            if COQ_8_5:
+            if COQ_MAJOR_VERSION >= (8,5):
                 if cmds_to_undo:
                     cmd = cmds_to_undo[0]
                     print("Rewinding to state {}...".format(state_to_rewind_to))
@@ -530,16 +577,18 @@ class CoqWorker(threading.Thread):
                     break
                 if forward:
                     state_id = None
-                    if COQ_8_5:
+                    if COQ_MAJOR_VERSION >= (8,5):
                         # pr(parsed)
                         # pr(parsed.find(".//state_id"))
+                        # print(repr(parsed.find(".//state_id").attrib))
+                        # print(repr(parsed.find(".//state_id").attrib.get("val")))
                         state_id = int(parsed.find(".//state_id").attrib.get("val"))
-                        # print(state_id)
+                        # print("GOT STATE ID: {}".format(state_id))
                     self.undo_stack.push(cmd, state_id=state_id)
                     self.view.add_regions("Coq", [sublime.Region(0, cmd.end)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
 
         print("asking for goal")
-        if COQ_8_5:
+        if COQ_MAJOR_VERSION >= (8,5):
             response = self.coqtop.send('<call val="Goal"><unit/></call>')
         else:
             response = self.coqtop.send('<call val="goal"></call>')
