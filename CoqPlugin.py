@@ -328,6 +328,8 @@ class CoqtopProc(object):
         Stop the underlying coqtop process.
         """
         self.proc.terminate()
+        ret = self.proc.wait()
+        print("coqtop exited with status {}".format(ret))
         self.proc = None
 
 # --------------------------------------------------------- Undo Stack
