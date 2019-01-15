@@ -504,10 +504,9 @@ class CoqWorker(threading.Thread):
 
         idx = prev_command(self.view, idx)
         if idx is None:
-            print("no more commands in file?")
-            return
-
-        idx += 1
+            idx = 0
+        else:
+            idx += 1
 
         if idx == self.coq_eval_point:
             print("no need to go anywhere")
