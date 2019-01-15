@@ -143,7 +143,7 @@
 
         <dict>
             <key>match</key>
-            <string>:|\||=|&lt;|&gt;|\*|\+|-|\{|\}</string>
+            <string>:|\||=|&lt;|&gt;|\*|\+|-|\{|\}|\\|\/</string>
             <key>comment</key>
             <string>Operators</string>
             <key>name</key>
@@ -229,16 +229,9 @@
 
         <dict>
             <key>match</key>
-            <string>\bTrue\b</string>
+            <string>\bTrue|False|true|false\b</string>
             <key>name</key>
-            <string>constant.language.boolean.true.gallina</string>
-        </dict>
-
-        <dict>
-            <key>match</key>
-            <string>\bFalse\b</string>
-            <key>name</key>
-            <string>constant.language.boolean.false.gallina</string>
+            <string>constant.language.boolean.gallina</string>
         </dict>
 
         <dict>
