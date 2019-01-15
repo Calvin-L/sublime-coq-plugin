@@ -452,7 +452,7 @@ class SplitPaneDisplay(CoqDisplay):
         self.response_view.run_command("coq_update_output_buffer", {"text": goal})
 
     def was_closed_by_user(self):
-        return self.response_view.window() is None
+        return self.view.window() is None or self.response_view.window() is None
 
     def close(self):
         sublime.set_timeout(self._cleanup, 0)
@@ -526,7 +526,7 @@ class InlinePhantomDisplay(CoqDisplay):
                 layout=sublime.LAYOUT_BELOW)])
 
     def was_closed_by_user(self):
-        return False
+        return self.view.window() is None
 
     def close(self):
         sublime.set_timeout(self._cleanup, 0)
