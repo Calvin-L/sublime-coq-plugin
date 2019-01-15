@@ -69,7 +69,7 @@ Modifying your color scheme isn't terribly easy; I'm just going to point you at 
 
 ## Known Issues / TODO
 
- - Only supports Coq 8.5
+ - Only known to work in Coq 8.6+
  - There aren't really any settings available, so you might need to modify CoqPlugin.py on your own
  - The highlighting for the proven region is really ugly. (I want some way of highlighting that colors the background without removing other syntax highlighting, but that doesn't seem possible in Sublime.)
  - Typing in the proven or TODO region can confuse the plugin
