@@ -78,3 +78,10 @@ Proof.
   assumption.
 (* ^ support.function *)
 Qed.
+
+Inductive MyType :=
+  | Case1
+(*      ^ - constant *)
+  | CaseFalse
+(*        ^ - constant *)
+  .

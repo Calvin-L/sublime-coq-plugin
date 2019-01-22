@@ -229,7 +229,7 @@
 
         <dict>
             <key>match</key>
-            <string>\bTrue|False|true|false\b</string>
+            <string>\b(True|False|true|false)\b</string>
             <key>name</key>
             <string>constant.language.boolean.gallina</string>
         </dict>
