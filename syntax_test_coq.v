@@ -80,6 +80,8 @@ Proof.
 Qed.
 
 Inductive MyType :=
+(* ^ keyword *)
+(*           ^ entity.name *)
   | Case1
 (*      ^ - constant *)
   | CaseFalse
