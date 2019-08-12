@@ -35,6 +35,9 @@ from . import util
 # https://github.com/coq/coq/blob/trunk/stm/stm.mli
 # https://github.com/coq/coq/blob/trunk/lib/feedback.ml
 
+# relevant to future versions?
+# https://github.com/coq/coq/blob/master/dev/doc/xml-protocol.md
+
 # --------------------------------------------------------- Constants
 
 # COQ_MAJOR_VERSION = (8,5)
@@ -348,9 +351,10 @@ class UndoStack(object):
         in unexpected ways.
     """
 
-    def __init__(self):
+    def __init__(self, init_state_id=1):
         self.stack = []
         self.state_ids = []
+        self.init_state_id = init_state_id
 
     def most_recent(self, ty):
         """
@@ -402,13 +406,13 @@ class UndoStack(object):
         self.stack = self.stack[:new_end_idx]
         self.state_ids = self.state_ids[:new_end_idx]
         to_undo.reverse()
-        return (to_undo, self.state_ids[-1] if self.state_ids else 1)
+        return (to_undo, self.state_ids[-1] if self.state_ids else self.init_state_id)
 
     def state_id_of_tip(self):
         """
         Returns the most recent state id.
         """
-        return self.state_ids[-1] if self.state_ids else 1
+        return self.state_ids[-1] if self.state_ids else self.init_state_id
 
 # --------------------------------------------------------- Feedback Display
 
@@ -563,7 +567,14 @@ class CoqWorker(threading.Thread):
         if f is not None:
             working_dir = os.path.dirname(f)
         self.coqtop = CoqtopProc(working_dir=working_dir)
-        self.undo_stack = UndoStack()
+
+        state_id = 1
+        if COQ_MAJOR_VERSION >= (8,9):
+            for parsed in self.coqtop.send('<call val="Init"><option val="none"/></call>'):
+                if parsed.tag == "value":
+                    state_id = int(parsed.find(".//state_id").attrib.get("val"))
+
+        self.undo_stack = UndoStack(state_id)
         self.display = InlinePhantomDisplay(view)
 
     def _on_stop(self):
