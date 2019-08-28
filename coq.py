@@ -8,7 +8,6 @@ Key contents:
 import os.path
 import re
 import subprocess
-import string
 import xml.etree.ElementTree as ET
 
 from . import util
@@ -115,7 +114,7 @@ TOKENS = (
     ("string",        re.compile(r'"[^"]*"')),
     ("whitespace",    re.compile(r'\s+')),
     ("word",          re.compile(r'\w+')),
-    ("symbol",        re.compile(r'[{}]+'.format(re.escape(string.punctuation)))),
+    ("fullstop",      re.compile(r'\.')),
 )
 
 def tokens(text, start=0):
