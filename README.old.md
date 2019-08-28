@@ -1,6 +1,6 @@
 # Sublime-Coq
 
-This package provides Coq syntax highlighting and an interactive coqtop plugin for Coq 8.6+ and Sublime Text 3. (I guess it might work with Sublime Text 2, but I haven't tested it and I don't recommend trying it.)
+This package provides Coq syntax highlighting and an interactive coqtop plugin for Coq in Sublime Text 3. (I guess it might work with Sublime Text 2, but I haven't tested it and I don't recommend trying it.)  The plugin supports Coq versions 8.5 to 8.10.  (It may also support higher versions, but as of this writing 8.10 is the latest.)
 
 ## Install
 
@@ -22,7 +22,6 @@ shift+ctrl+k: kill coqtop
 
 ## Known Issues / TODO
 
- - Only known to work in Coq 8.6+
  - There aren't really any settings available, so you might need to modify CoqPlugin.py on your own
  - The highlighting for the proven region is really ugly. (I want some way of highlighting that colors the background without removing other syntax highlighting, but that doesn't seem possible in Sublime.)
  - Typing in the proven or TODO region can confuse the plugin

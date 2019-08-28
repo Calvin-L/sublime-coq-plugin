@@ -1,6 +1,14 @@
 import io
 import re
 
+def xml_encode(s):
+    return (s
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("'", "&apos;")
+        .replace('"', "&quot;"))
+
 class XMLMuncher(object):
     """
     Splits a series of XML tags (e.g. <a><c/></a><b/>) into a stream
