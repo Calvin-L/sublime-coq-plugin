@@ -152,7 +152,7 @@ def find_first_coq_command(text, start=0):
     """
     for token_pos, token_type, token_len, token_text in tokens(text, start):
         if token_type == "fullstop":
-            return token_pos + token_len
+            return token_pos + 1
     return None
 
 
@@ -230,8 +230,8 @@ class CoqBot(object):
     def append(self, text, start=0):
         """Send the first command in `text[start:]` to Coq.
 
-        Returns the number of characters from `text` sent to Coq, such that
-        `text[start:start+ret]` is what was sent.
+        Returns the new offset after processing the first command in
+        text[start:], such that `text[start:RETURN_VALUE]` is what was sent.
 
         Appends the sent command to this object's "sent buffer" (see
         `rewind_to(...)`).
@@ -251,7 +251,7 @@ class CoqBot(object):
                     break
                 else:
                     # Optional: update display
-                    idx += n
+                    idx = n
         """
 
         index_of_end_of_command = find_first_coq_command(text, start)
