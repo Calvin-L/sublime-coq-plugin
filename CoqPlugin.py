@@ -256,7 +256,11 @@ class CoqWorker(threading.Thread):
                     return
 
             if do_step:
-                self.step(*do_step)
+                try:
+                    self.step(*do_step)
+                except Exception as e:
+                    print("uncaught exception: {}".format(e))
+                    self.stop()
 
     def seek(self, pos):
         with self.monitor:
@@ -313,6 +317,7 @@ class CoqWorker(threading.Thread):
                 cmd_len = self.coq.append(text)
             except Exception as e:
                 self.display.show_goal("Error: {}".format(e))
+                self.desired_high_water_mark = from_idx
                 return
 
             if cmd_len == 0:
