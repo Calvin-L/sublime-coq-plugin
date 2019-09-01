@@ -77,7 +77,7 @@ def send_all(coq, text):
     sent_cmds = []
     i = 0
     while True:
-        offset = proc.append(text, start=i)
+        offset = coq.append(text, start=i)
         if offset:
             sent_cmds.append(text[i:offset])
             i = offset
