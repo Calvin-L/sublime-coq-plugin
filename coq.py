@@ -198,7 +198,7 @@ def format_response(xml, coq_version):
     for x in xml:
         if x.tag == "value":
             if x.attrib.get("val") != "good":
-                return "Error: {}".format(text_of(x))
+                raise CoqException(text_of(x))
             goals = list(x.iter("goal"))
             output = "Goals: {}\n\n".format(len(goals))
             if goals:
@@ -352,7 +352,7 @@ class CoqBot(object):
                     error = text_of(parsed).strip()
                     if not error:
                         error = "(unknown error)"
-                    raise Exception("error while rewinding: {}".format(error))
+                    raise CoqException(error)
             self.cmds_sent = self.cmds_sent[0:index_of_earliest_undone_command]
             self.state_id = state_to_rewind_to
 

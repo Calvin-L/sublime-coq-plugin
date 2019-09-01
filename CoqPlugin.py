@@ -327,10 +327,20 @@ class CoqWorker(threading.Thread):
 
         else:
 
-            self.high_water_mark = self.desired_high_water_mark = self.coq.rewind_to(to_idx)
+            try:
+                self.high_water_mark = self.desired_high_water_mark = self.coq.rewind_to(to_idx)
+            except coq.CoqException as e:
+                # The exception will be caught and displayed when we try to
+                # show the current goal later.
+                pass
+
+        try:
+            goal = self.coq.current_goal()
+        except coq.CoqException as e:
+            goal = "Error: {}".format(str(e))
+            self.desired_high_water_mark = self.high_water_mark
 
         self.display.set_marks(self.high_water_mark, self.desired_high_water_mark)
-        goal = self.coq.current_goal()
         self.display.show_goal(goal)
 
 # --------------------------------------------------------- Sublime Commands

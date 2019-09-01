@@ -85,6 +85,50 @@ def send_all(coq, text):
             break
     return (sent_cmds, i)
 
+def test_rewind_past_error(path, version):
+    proc = coq.CoqBot(
+        coq_install_dir=path,
+        coq_version=version,
+        extra_args=["-q"]) # -q: do not load rcfile
+    try:
+        proc.append("Theorem foo : True /\\ True.")
+        proc.append("Proof.")
+        proc.append("  split.")
+        send_all(proc, "  - constructor.")
+
+        try:
+            send_all(proc, "  + constructor.")
+        except coq.CoqException:
+            # Versions 8.6 and earlier will throw an error eagerly here.
+            # That's fine!  We don't need to test them.  We are interested in
+            # newer versions that accept the change but report the error lazily
+            # when we try to get the goal or rewind to a particular state.
+            return
+
+        try:
+            print(proc.current_goal())
+            assert False, "expected CoqException"
+        except coq.CoqException:
+            pass
+
+        try:
+            proc.rewind_to(27+6+8+16+9)
+            assert False, "expected CoqException"
+        except coq.CoqException:
+            pass
+
+        # The previous rewind should fail, but leave us able to rewind to a
+        # good state!
+        proc.rewind_to(27+6+8+16)
+        send_all(proc, "  - constructor.")
+        proc.append("Qed.")
+        print(proc.current_goal())
+    except Exception as e:
+        print("!!! CAUGHT {}".format(repr(e)))
+        raise
+    finally:
+        proc.stop()
+
 if __name__ == "__main__":
     test_xml_muncher()
 
@@ -96,6 +140,7 @@ if __name__ == "__main__":
     for version in COQ_VERSIONS:
         print("=" * 40 + " COQ VERSION: {}.{}".format(*version))
         path = path_to_coqtop(version)
+
         proc = coq.CoqBot(
             coq_install_dir=path,
             coq_version=version,
@@ -122,3 +167,5 @@ if __name__ == "__main__":
             print(proc.current_goal())
         finally:
             proc.stop()
+
+        test_rewind_past_error(path, version)
