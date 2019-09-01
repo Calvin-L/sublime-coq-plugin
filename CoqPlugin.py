@@ -300,6 +300,25 @@ class CoqWorker(threading.Thread):
                 return
             index = new_index
 
+    def change_desired_high_water_mark(self, expected_value, new_value):
+        """Set self.desired_high_water_mark via compare-and-swap.
+
+        This helper method can be used to safely write to
+        self.desired_high_water_mark.  Normally it is unsafe to do so directly
+        since other threads may write to it via self.seek().
+
+        This method returns True if the value was equal to expected_value and
+        was updated.  Otherwise it returns False and has no effect.  The return
+        value can be used to detect whether self.seek() was called between when
+        expected_value was read and when this method was called.
+        """
+        with self.monitor:
+            if self.desired_high_water_mark == expected_value:
+                self.desired_high_water_mark = new_value
+                return True
+            else:
+                return False
+
     def step(self, from_idx, to_idx):
         if self.display.was_closed_by_user():
             print("worker {}'s display was closed; stopping")
@@ -317,28 +336,30 @@ class CoqWorker(threading.Thread):
                 cmd_len = self.coq.append(text)
             except Exception as e:
                 self.display.show_goal("Error: {}".format(e))
-                self.desired_high_water_mark = from_idx
+                self.change_desired_high_water_mark(to_idx, from_idx)
                 return
 
             if cmd_len == 0:
-                self.desired_high_water_mark = from_idx
+                self.change_desired_high_water_mark(to_idx, from_idx)
             else:
                 self.high_water_mark += cmd_len
 
         else:
 
             try:
-                self.high_water_mark = self.desired_high_water_mark = self.coq.rewind_to(to_idx)
+                rewind_point = self.coq.rewind_to(to_idx)
             except coq.CoqException as e:
                 # The exception will be caught and displayed when we try to
                 # show the current goal later.
                 pass
+            self.high_water_mark = rewind_point
+            self.change_desired_high_water_mark(to_idx, rewind_point)
 
         try:
             goal = self.coq.current_goal()
         except coq.CoqException as e:
             goal = "Error: {}".format(str(e))
-            self.desired_high_water_mark = self.high_water_mark
+            self.change_desired_high_water_mark(to_idx, self.high_water_mark)
 
         self.display.set_marks(self.high_water_mark, self.desired_high_water_mark)
         self.display.show_goal(goal)
