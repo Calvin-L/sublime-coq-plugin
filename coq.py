@@ -114,7 +114,7 @@ TOKENS = (
     ("string",        re.compile(r'"[^"]*"')),
     ("whitespace",    re.compile(r'\s+')),
     ("word",          re.compile(r'\w+')),
-    ("fullstop",      re.compile(r'\.')),
+    ("fullstop",      re.compile(r'\.(?:\s+|$)')),
 )
 
 def tokens(text, start=0):
@@ -123,11 +123,12 @@ def tokens(text, start=0):
     while i < len(text):
         name = "other"
         match = text[i]
-        for name, regex in TOKENS:
+        for n, regex in TOKENS:
             m = regex.match(text, pos=i)
-            if m and name == "symbol" and ("(*" in m.group(0) or "*)" in m.group(0)):
+            if m and n == "symbol" and ("(*" in m.group(0) or "*)" in m.group(0)):
                 m = None
             if m:
+                name = n
                 match = m.group(0)
                 break
         if name == "open_comment":
@@ -137,7 +138,7 @@ def tokens(text, start=0):
         elif name == "whitespace":
             pass
         elif comment_depth == 0:
-            yield (i, len(match), match)
+            yield (i, name, len(match), match)
         i += len(match)
 
 
@@ -149,8 +150,8 @@ def find_first_coq_command(text, start=0):
 
     If no command is present, this function returns None.
     """
-    for token_pos, token_len, token_text in tokens(text, start):
-        if token_text == ".":
+    for token_pos, token_type, token_len, token_text in tokens(text, start):
+        if token_type == "fullstop":
             return token_pos + token_len
     return None
 

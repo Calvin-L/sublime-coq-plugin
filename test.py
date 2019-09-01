@@ -88,12 +88,28 @@ if __name__ == "__main__":
             coq_version=version,
             extra_args=["-q"]) # -q: do not load rcfile
         try:
+            i = 0
+            text = """
+                Record R := { field : nat }.
+                Definition x := Build_R 0.
+                Definition y := x.(field).
+            """
+            steps = 0
+            while True:
+                sent = proc.append(text, start=i)
+                if sent:
+                    steps += 1
+                    i = sent
+                else:
+                    break
+            assert steps == 3, "tokenization gave us {} steps instead of 3".format(steps)
+
             proc.append("Theorem foo : False \\/ True.")
             proc.append("Proof.")
             print(proc.current_goal())
             proc.append(" - intuition.")
             print(proc.current_goal())
-            proc.rewind_to(35)
+            proc.rewind_to(len(text) + 35)
             proc.append("   right.")
             proc.append("   constructor.")
             print(proc.current_goal())
