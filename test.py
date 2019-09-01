@@ -72,6 +72,19 @@ COQ_VERSIONS = [
     (8,5),
 ]
 
+def send_all(coq, text):
+    """Returns (list_of_commands, end_index)"""
+    sent_cmds = []
+    i = 0
+    while True:
+        offset = proc.append(text, start=i)
+        if offset:
+            sent_cmds.append(text[i:offset])
+            i = offset
+        else:
+            break
+    return (sent_cmds, i)
+
 if __name__ == "__main__":
     test_xml_muncher()
 
@@ -88,28 +101,20 @@ if __name__ == "__main__":
             coq_version=version,
             extra_args=["-q"]) # -q: do not load rcfile
         try:
-            i = 0
             text = """
                 Record R := { field : nat }.
                 Definition x := Build_R 0.
-                Definition y := x.(field).
-            """
-            steps = 0
-            while True:
-                sent = proc.append(text, start=i)
-                if sent:
-                    steps += 1
-                    i = sent
-                else:
-                    break
-            assert steps == 3, "tokenization gave us {} steps instead of 3".format(steps)
+                Definition y := x.(field)."""
+            cmds, _ = send_all(proc, text)
+            assert len(cmds) == 3, "tokenization gave us {} steps instead of 3".format(len(cmds))
 
             proc.append("Theorem foo : False \\/ True.")
             proc.append("Proof.")
             print(proc.current_goal())
-            proc.append(" - intuition.")
+            cmds, _ = send_all(proc, " - intuition.")
+            assert len(cmds) == 2, "tokenization gave us {} steps instead of 2".format(len(cmds))
             print(proc.current_goal())
-            proc.rewind_to(len(text) + 35)
+            proc.rewind_to(len(text) + 40)
             proc.append("   right.")
             proc.append("   constructor.")
             print(proc.current_goal())

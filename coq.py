@@ -142,6 +142,8 @@ def tokens(text, start=0):
         i += len(match)
 
 
+BULLET_CHARS = { "-", "+", "*", "{", "}" }
+BULLET_CHARS_REGEX = re.compile(r"\s*[" + re.escape("".join(BULLET_CHARS)) + r"]")
 def find_first_coq_command(text, start=0):
     """Find the first Coq command in `text[start:]`.
 
@@ -150,9 +152,22 @@ def find_first_coq_command(text, start=0):
 
     If no command is present, this function returns None.
     """
+
+    is_first = True
     for token_pos, token_type, token_len, token_text in tokens(text, start):
+
+        # Bullet characters in Ltac require some care; each is its own command
+        if is_first:
+            match = BULLET_CHARS_REGEX.match(token_text)
+            if match:
+                return token_pos + match.end()
+
+        # Otherwise, commands end in fullstops
         if token_type == "fullstop":
             return token_pos + 1
+
+        is_first = False
+
     return None
 
 
