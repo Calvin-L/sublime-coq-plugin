@@ -264,7 +264,7 @@ class CoqWorker(threading.Thread):
 
     def seek(self, pos):
         with self.monitor:
-            if self.state == "ALIVE":
+            if self.state == "ALIVE" and pos != self.desired_high_water_mark:
                 self.desired_high_water_mark = pos
                 self.display.show_goal("Working...")
                 self.display.set_marks(min(pos, self.high_water_mark), pos)
