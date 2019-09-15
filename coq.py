@@ -103,10 +103,12 @@ class CoqtopProc(object):
         """
         Stop the underlying coqtop process.
         """
-        self.proc.terminate()
-        ret = self.proc.wait()
-        print("coqtop exited with status {}".format(ret))
-        self.proc = None
+        p = self.proc
+        if p is not None:
+            p.terminate()
+            ret = p.wait()
+            print("coqtop exited with status {}".format(ret))
+            self.proc = None
 
 TOKENS = (
     ("open_comment",  re.compile(r'\(\*')),
