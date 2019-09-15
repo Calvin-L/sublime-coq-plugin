@@ -255,6 +255,7 @@ class CoqWorker(threading.Thread):
                 else:
                     return
 
+            self.display.set_marks(self.high_water_mark, self.desired_high_water_mark)
             if do_step:
                 try:
                     self.step(*do_step)
