@@ -9,6 +9,7 @@ import os.path
 import re
 import subprocess
 import xml.etree.ElementTree as ET
+import shlex
 
 from . import util
 
