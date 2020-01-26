@@ -90,6 +90,26 @@ class CoqDisplay(object):
        be called externally.)
      - Batching.  Frequent changes to the display will be accumulated into a
        single batch and applied all at once.
+
+    Lifecycle:
+
+        +--- Synchronized -----------+
+        | (initial state;            |
+        | update_scheduled=False and |
+        | flush() is not running)    |
+        +----------------------------+
+                |  ^
+         update |  | flush
+                v  |
+        +--- Update Scheduled ----+
+        +-------------------------+
+                |
+                | if should_close=True
+                v
+        +--- Closed -----+
+        | is_closed=True |
+        +----------------+
+
     """
 
     def __init__(self, view):
@@ -102,7 +122,7 @@ class CoqDisplay(object):
         self.high_water_mark = 0
         self.todo_mark = 0
         self.goal = ""
-        self.is_open = True
+        self.should_close = False
         self.is_closed = False
         self.update_scheduled = False
 
@@ -123,7 +143,7 @@ class CoqDisplay(object):
 
     def close(self):
         with self._update():
-            self.is_open = False
+            self.should_close = True
 
     @contextlib.contextmanager
     def _update(self):
@@ -148,7 +168,7 @@ class CoqDisplay(object):
 
         # take a snapshot of the state
         with self.lock:
-            is_open = self.is_open
+            should_close = self.should_close
             high_water_mark = self.high_water_mark
             todo_mark = self.todo_mark
             goal = self.goal
@@ -158,11 +178,12 @@ class CoqDisplay(object):
             self.update_scheduled = False
 
         # update the display
-        if is_open:
+        if should_close:
+            if not self.is_closed:
+                self._cleanup()
+                self.is_closed = True
+        else:
             self._apply(high_water_mark, todo_mark, goal)
-        elif not self.is_closed:
-            self._cleanup()
-            self.is_closed = True
 
     def _cleanup(self):
         """Subclasses must implement this."""
