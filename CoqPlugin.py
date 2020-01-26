@@ -4,6 +4,7 @@ Sublime Text 3 plugin for Coq.
 
 # builtin modules
 import collections
+import contextlib
 import os.path
 import queue
 import re
@@ -52,16 +53,123 @@ DONE_FLAGS = 0 # sublime.DRAW_SQUIGGLY_UNDERLINE | sublime.DRAW_NO_FILL | sublim
 
 # --------------------------------------------------------- Feedback Display
 
+""" !!! IMPORTANT NOTE !!!
+
+    In general, interaction with Sublime Text should be done only on the main
+    thread.  This is true even though the ST plugin manual [1] claims that "All
+    API functions are thread-safe".  Here are some good reasons why you should
+    not assume that "thread-safe" means "always safe to call from a secondary
+    thread":
+
+      - Even if each call to an ST plugin procedure is atomic, we need to
+        string multiple calls together.  Those calls will not be atomic, so if
+        multiple threads are modifying the same view, the view can get into an
+        unexpected state.  It is much simpler to assume that every procedure we
+        write will be run atomically, with no interleaving from other threads.
+
+      - Deadlock is possible.  ST's thread safety involves some internal hidden
+        locks, and I have seen a lot of deadlocks of the form:
+          1. The main thread acquires some internal lock.
+          2. A secondary thread acquires some plugin-specific lock.
+          3. The secondary thread tries to call a ST function that acquires the
+             same internal lock, and blocks.
+          4. An EventListener tries to acquire the same plugin-specific lock
+             to safely interact with the secondary thread, and blocks, causing
+             deadlock.
+"""
+
 class CoqDisplay(object):
+    """A thread-safe display handle.
+
+    Instances of this class interact with Sublime Text to provide feedback to
+    the user.  They have the following convenient attributes:
+
+     - Thread-safe.  Any thread may use most methods of this class without fear
+       of deadlock or concurrency issues.  (There are some exceptions, noted in
+       the docstrings.  Private methods start with underscores and should not
+       be called externally.)
+     - Batching.  Frequent changes to the display will be accumulated into a
+       single batch and applied all at once.
+    """
+
     def __init__(self, view):
+        """This method may only be called from the main thread.
+
+        Subclasses may initialize the view when this is called."""
+
         self.view = view
+
+        self.high_water_mark = 0
+        self.todo_mark = 0
+        self.goal = ""
+        self.is_open = True
+        self.is_closed = False
+        self.update_scheduled = False
+
+        self.lock = threading.Lock()
+
     def set_marks(self, high_water_mark, todo_mark):
-        raise NotImplementedError()
+        with self._update():
+            self.high_water_mark = high_water_mark
+            self.todo_mark = todo_mark
+
     def show_goal(self, goal):
-        raise NotImplementedError()
+        with self._update():
+            self.goal = goal
+
     def was_closed_by_user(self):
+        """This method may only be called from the main thread."""
         raise NotImplementedError()
+
     def close(self):
+        with self._update():
+            self.is_open = False
+
+    @contextlib.contextmanager
+    def _update(self):
+        need_schedule = False
+        with self.lock:
+            yield
+
+            # With the lock held, try to become the one thread responsible for
+            # scheduling the update.
+            if not self.update_scheduled:
+                need_schedule = True
+                self.update_scheduled = True
+
+        if need_schedule:
+            # Delay to increase odds of successful batching, and to give
+            # Sublime Text some time to accept user input.
+            delay_milliseconds = 10
+            sublime.set_timeout(self.flush, delay_milliseconds)
+
+    def flush(self):
+        """This method may only be called from the main thread."""
+
+        # take a snapshot of the state
+        with self.lock:
+            is_open = self.is_open
+            high_water_mark = self.high_water_mark
+            todo_mark = self.todo_mark
+            goal = self.goal
+
+            # No future update is scheduled.  If the state changes after this
+            # snapshot, another update will be scheduled to handle it later.
+            self.update_scheduled = False
+
+        # update the display
+        if is_open:
+            self._apply(high_water_mark, todo_mark, goal)
+        elif not self.is_closed:
+            self._cleanup()
+            self.is_closed = True
+
+    def _cleanup(self):
+        """Subclasses must implement this."""
+        raise NotImplementedError()
+
+    def _apply(self, high_water_mark, todo_mark, goal):
+        """Subclasses must implement this."""
         raise NotImplementedError()
 
 class SplitPaneDisplay(CoqDisplay):
@@ -86,21 +194,8 @@ class SplitPaneDisplay(CoqDisplay):
             window.set_view_index(self.response_view, group, 0)
         window.focus_view(view)
 
-    def set_marks(self, high_water_mark, todo_mark):
-        self.view.add_regions("Coq", [sublime.Region(0, high_water_mark)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
-        if todo_mark > high_water_mark:
-            self.view.add_regions("CoqTODO", [sublime.Region(high_water_mark, todo_mark)], scope=TODO_SCOPE_NAME, flags=TODO_FLAGS)
-        else:
-            self.view.erase_regions("CoqTODO")
-
-    def show_goal(self, goal):
-        self.response_view.run_command("coq_update_output_buffer", {"text": goal})
-
     def was_closed_by_user(self):
         return self.view.window() is None or self.response_view.window() is None
-
-    def close(self):
-        sublime.set_timeout(self._cleanup, 0)
 
     def _cleanup(self):
         self.view.erase_regions("Coq")
@@ -114,19 +209,19 @@ class SplitPaneDisplay(CoqDisplay):
             window.run_command("close")
             window.focus_view(self.view)
 
+    def _apply(self, high_water_mark, todo_mark, goal):
+        self.view.add_regions("Coq", [sublime.Region(0, high_water_mark)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
+        if todo_mark > high_water_mark:
+            self.view.add_regions("CoqTODO", [sublime.Region(high_water_mark, todo_mark)], scope=TODO_SCOPE_NAME, flags=TODO_FLAGS)
+        else:
+            self.view.erase_regions("CoqTODO")
+        self.response_view.run_command("coq_update_output_buffer", {"text": goal})
+
 class InlinePhantomDisplay(CoqDisplay):
     def __init__(self, view):
         super().__init__(view)
         self.phantoms = sublime.PhantomSet(view, "CoqPhantoms")
         self.region = sublime.Region(0, 0)
-
-    def set_marks(self, high_water_mark, todo_mark):
-        self.region = region = sublime.Region(0, high_water_mark)
-        self.view.add_regions("Coq", [region], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
-        if todo_mark > high_water_mark:
-            self.view.add_regions("CoqTODO", [sublime.Region(high_water_mark, todo_mark)], scope=TODO_SCOPE_NAME, flags=TODO_FLAGS)
-        else:
-            self.view.erase_regions("CoqTODO")
 
     def format_goal(self, goal):
         goal = (goal
@@ -156,7 +251,22 @@ class InlinePhantomDisplay(CoqDisplay):
         </body>
         """
 
-    def show_goal(self, goal):
+    def was_closed_by_user(self):
+        return self.view.window() is None
+
+    def _cleanup(self):
+        self.view.erase_regions("Coq")
+        self.view.erase_regions("CoqTODO")
+        self.phantoms.update([])
+
+    def _apply(self, high_water_mark, todo_mark, goal):
+        self.region = region = sublime.Region(0, high_water_mark)
+        self.view.add_regions("Coq", [region], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
+        if todo_mark > high_water_mark:
+            self.view.add_regions("CoqTODO", [sublime.Region(high_water_mark, todo_mark)], scope=TODO_SCOPE_NAME, flags=TODO_FLAGS)
+        else:
+            self.view.erase_regions("CoqTODO")
+
         marker_pos = self.region.end()
         marker_region = sublime.Region(marker_pos, marker_pos)
         goal_pos = self.view.line(marker_region).begin()
@@ -169,17 +279,6 @@ class InlinePhantomDisplay(CoqDisplay):
                 region=sublime.Region(goal_pos, goal_pos),
                 content=self.format_goal(goal),
                 layout=sublime.LAYOUT_BELOW)])
-
-    def was_closed_by_user(self):
-        return self.view.window() is None
-
-    def close(self):
-        sublime.set_timeout(self._cleanup, 0)
-
-    def _cleanup(self):
-        self.view.erase_regions("Coq")
-        self.view.erase_regions("CoqTODO")
-        self.phantoms.update([])
 
 # --------------------------------------------------------- Coq Worker
 
