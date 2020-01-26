@@ -1,6 +1,6 @@
 # Sublime-Coq
 
-This package provides Coq syntax highlighting and an interactive coqtop plugin for Coq in Sublime Text 3. (I guess it might work with Sublime Text 2, but I haven't tested it and I don't recommend trying it.)  The plugin supports Coq versions 8.5 to 8.10.  (It may also support higher versions, but as of this writing 8.10 is the latest.)
+This package provides Coq syntax highlighting and an interactive coqtop plugin for Coq in Sublime Text 3.  The plugin supports Coq versions 8.5 to 8.10.  (It may also support higher versions, but as of this writing 8.10 is the latest.)
 
 ## Install
 
@@ -28,3 +28,4 @@ shift+ctrl+k: kill coqtop
  - Keyboard bindings only exist for OSX
  - Feedback from commands `Check`, `Print`, `Search`, etc. is not shown in the response window
  - I have no idea what happens if you duplicate the view in which you are interacting with Coq
+ - Sublime Text 2 is not supported
