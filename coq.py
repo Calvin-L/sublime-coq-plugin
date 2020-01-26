@@ -73,7 +73,7 @@ class CoqtopProc(object):
 
         if text[-1] != "\n":
             text += "\n"
-        print("sending: {}".format(text.encode("unicode-escape")))
+        # print("sending: {}".format(text.encode("unicode-escape")))
 
         # Send
         self.proc.stdin.write(text.encode("ascii"))
@@ -88,9 +88,9 @@ class CoqtopProc(object):
             try:
                 response = buf.decode("ascii")
             except UnicodeDecodeError as e:
-                print("{}".format(list("{:x}".format(b) for b in buf)))
+                # print("{}".format(list("{:x}".format(b) for b in buf)))
                 raise e
-            print("got partial response: {}".format(response))
+            # print("got partial response: {}".format(response))
             if not response:
                 raise Exception("coqtop died!")
             for tag in xm.process(response):
@@ -219,8 +219,8 @@ def format_response(xml, coq_version):
                 output += "  " + ("-" * 40) + "\n"
                 output += "  {}\n".format(text_of(goal))
             return output
-        else:
-            print("got tag '{}'".format(x))
+        # else:
+        #     print("got tag '{}'".format(x))
 
 
 class CoqException(Exception):
@@ -317,7 +317,7 @@ class CoqBot(object):
         focused goal.
         """
 
-        print("asking for goal")
+        # print("asking for goal")
         if self.coq_version >= (8,5):
             response = self.coqtop.send('<call val="Goal"><unit/></call>')
         else:
