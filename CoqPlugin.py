@@ -301,10 +301,30 @@ class InlinePhantomDisplay(CoqDisplay):
                 content=self.format_goal(goal),
                 layout=sublime.LAYOUT_BELOW)])
 
-# --------------------------------------------------------- Coq Worker
+# --------------------------------------------------------- Logging
 
-# maps view IDs to worker threads
-coq_threads = dict()
+class Log(object):
+    def __init__(self):
+        pass
+    def write(self, value):
+        pass
+
+## Uncomment this definition to use a real log file.
+#
+# class Log(object):
+#     def __init__(self):
+#         self.f = open("/tmp/sublime-coq-plugin.log", "a")
+#     def write(self, value):
+#         now = time.asctime(time.localtime())
+#         self.f.write("[{}, {}]: {}\n".format(
+#             now,
+#             threading.get_ident(),
+#             value))
+#         self.f.flush()
+
+log = Log()
+
+# --------------------------------------------------------- Coq Worker
 
 class CoqWorker(threading.Thread):
     """Asynchronous worker thread for the Sublime-Coq plugin.
@@ -319,23 +339,24 @@ class CoqWorker(threading.Thread):
     state).
 
     Commands that can be called from other threads:
-      - seek(pos) --> start evaluating or change evaluation target
-      - mark_dirty() --> seek backwards if changes have been made in the proven region
-      - stop()    --> enter the STOPPING state to shut down Coq
+      - seek(text, pos)  --> start evaluating or change evaluation target
+      - mark_dirty(text) --> seek backwards if changes have been made in the proven region
+      - stop()           --> enter the STOPPING state to shut down Coq
+
+    Note the "text" parameter: the worker needs to be given the current view
+    contents.  A value of `None` indicates that the text has not changed.
 
     The worker updates the Sublime Text view as it changes state and as Coq
     sends responses.
     """
 
-    def __init__(self, view):
+    def __init__(self, display, file_path=None):
         super().__init__(daemon=True)
-        self.view = view
-        self.display = InlinePhantomDisplay(view)
+        self.display = display
 
         working_dir = None
-        f = view.file_name()
-        if f is not None:
-            working_dir = os.path.dirname(f)
+        if file_path is not None:
+            working_dir = os.path.dirname(file_path)
 
         coqtop_path = COQTOP_PATH
         while coqtop_path.endswith("/"):
@@ -350,6 +371,7 @@ class CoqWorker(threading.Thread):
             coq_version=COQ_MAJOR_VERSION,
             working_dir=working_dir)
 
+        self.text = ""
         self.state = "ALIVE"
         self.dirty = False
         self.desired_high_water_mark = 0
@@ -359,15 +381,19 @@ class CoqWorker(threading.Thread):
     def run(self):
         while True:
             do_step = None
+            log.write("Waiting on monitor [run]...")
             with self.monitor:
-                print("Worker state is: {} ({} --> {})".format(self.state, self.high_water_mark, self.desired_high_water_mark))
+                log.write("Acquired monitor! [run]")
+                log.write("Worker state is: {} ({} --> {})".format(self.state, self.high_water_mark, self.desired_high_water_mark))
                 if self.state == "ALIVE":
                     if self.dirty:
                         self.check_for_modifications()
                     elif self.desired_high_water_mark != self.high_water_mark:
                         do_step = (self.high_water_mark, self.desired_high_water_mark)
                     else:
+                        log.write("Releasing monitor [idle]")
                         self.monitor.wait()
+                        log.write("Acquired monitor [not-idle]")
                 elif self.state == "STOPPING":
                     self.coq.stop()
                     self.display.close()
@@ -380,28 +406,44 @@ class CoqWorker(threading.Thread):
                 try:
                     self.step(*do_step)
                 except Exception as e:
-                    print("uncaught exception: {}".format(e))
+                    log.write("uncaught exception: {}".format(e))
                     self.stop()
 
-    def seek(self, pos):
+    def seek(self, text, pos):
+        log.write("Waiting on monitor [seek]...")
         with self.monitor:
+            log.write("Acquired monitor! [seek]")
             if self.state == "ALIVE" and pos != self.desired_high_water_mark:
+                if text is not None:
+                    self.text = text
                 self.desired_high_water_mark = pos
                 self.display.show_goal("Working...")
                 self.display.set_marks(min(pos, self.high_water_mark), pos)
+                log.write("Notifying all [seek]")
                 self.monitor.notify_all()
+            log.write("Releasing monitor [seek]")
 
     def stop(self):
+        log.write("Waiting on monitor [stop]...")
         with self.monitor:
+            log.write("Acquired monitor! [step]")
             if self.state == "ALIVE":
                 self.state = "STOPPING"
                 self.display.show_goal("Stopping...")
+                log.write("Notifying all [stop]")
                 self.monitor.notify_all()
+            log.write("Releasing monitor [stop]")
 
-    def mark_dirty(self, dirty=True):
+    def mark_dirty(self, text=None, dirty=True):
+        log.write("Waiting on monitor [mark_dirty]...")
         with self.monitor:
+            log.write("Acquired monitor! [mark_dirty]")
+            if text is not None:
+                self.text = text
             self.dirty = dirty
+            log.write("Notifying all [mark_dirty]")
             self.monitor.notify_all()
+            log.write("Releasing monitor [mark_dirty]")
 
     def is_alive(self):
         return self.state != "DEAD"
@@ -411,15 +453,19 @@ class CoqWorker(threading.Thread):
         Called when the user altered the underlying buffer. We might need to
         rewind if they changed something in the proven region.
         """
+        log.write("Checking for modifications...")
         index = 0
-        self.mark_dirty(False)
-        buffer = self.view.substr(sublime.Region(0, self.high_water_mark))
+        self.mark_dirty(dirty=False)
+        buffer = self.text[0 : self.high_water_mark]
         for cmd in self.coq.sent_buffer():
+            log.write("Checking command {!r}".format(cmd))
             new_index = coq.find_first_coq_command(buffer, start=index)
             if new_index is None or cmd != buffer[index:new_index]:
-                self.seek(index)
+                self.seek(text=None, pos=index)
                 return
+            assert new_index > index
             index = new_index
+        log.write("Check for modifications finished")
 
     def change_desired_high_water_mark(self, expected_value, new_value):
         """Set self.desired_high_water_mark via compare-and-swap.
@@ -433,26 +479,23 @@ class CoqWorker(threading.Thread):
         value can be used to detect whether self.seek() was called between when
         expected_value was read and when this method was called.
         """
+        log.write("Waiting on monitor [change_desired_high_water_mark]...")
         with self.monitor:
+            log.write("Acquired monitor! [change_desired_high_water_mark]")
             if self.desired_high_water_mark == expected_value:
                 self.desired_high_water_mark = new_value
+                log.write("Releasing monitor [OK]")
                 return True
             else:
+                log.write("Releasing monitor [FAILED]")
                 return False
 
     def step(self, from_idx, to_idx):
-        if self.display.was_closed_by_user():
-            print("worker {}'s display was closed; stopping")
-            self.stop()
-            return
-
-        view = self.view
-
-        print("step called: {} --> {}".format(from_idx, to_idx))
+        log.write("step called: {} --> {}".format(from_idx, to_idx))
 
         if from_idx < to_idx:
-            text = view.substr(sublime.Region(from_idx, to_idx))
-            print("unsent: {!r}".format(text))
+            text = self.text[from_idx:to_idx]
+            log.write("unsent: {!r}".format(text))
             try:
                 cmd_len = self.coq.append(text)
             except Exception as e:
@@ -485,40 +528,54 @@ class CoqWorker(threading.Thread):
         self.display.set_marks(self.high_water_mark, self.desired_high_water_mark)
         self.display.show_goal(goal)
 
+# --------------------------------------------------------- Worker table
+
+# A map from view IDs to worker threads.  This structure may only be read
+# or written from the Sublime Text main thread.
+coq_threads = dict()
+
+def stop_worker(view_id, worker, reason):
+    log.write("stopping {} ({})...".format(worker, reason))
+    worker.stop()
+    worker.join(1)
+    if not worker.is_alive():
+        del coq_threads[view_id]
+        log.write("killed {}".format(worker))
+    else:
+        log.write("worker didn't die!")
+
 # --------------------------------------------------------- Sublime Commands
 
 class CoqCommand(sublime_plugin.TextCommand):
     def run(self, edit):
-        print(self.view.style_for_scope(DONE_SCOPE_NAME))
+        log.write(self.view.style_for_scope(DONE_SCOPE_NAME))
         # return
 
         if "coq" not in self.view.scope_name(0):
-            print("not inside a coq buffer")
+            log.write("not inside a coq buffer")
             return
         worker_key = self.view.id()
         worker = coq_threads.get(worker_key, None)
         if not worker:
-            worker = CoqWorker(self.view)
+            worker = CoqWorker(
+                display   = InlinePhantomDisplay(self.view),
+                file_path = self.view.file_name())
             coq_threads[worker_key] = worker
             worker.start()
-            print("spawned worker {} for view {}".format(worker, worker_key))
-        worker.seek(pos=self.view.sel()[0].a)
+            log.write("spawned worker {} for view {}".format(worker, worker_key))
+
+        pos = self.view.sel()[0].a
+        text = self.view.substr(sublime.Region(0, pos))
+        worker.seek(text=text, pos=pos)
 
 class CoqKillCommand(sublime_plugin.TextCommand):
     def run(self, edit):
         worker_key = self.view.id()
         worker = coq_threads.get(worker_key, None)
         if worker:
-            print("stopping {}...".format(worker))
-            worker.stop()
-            worker.join(1)
-            if not worker.is_alive():
-                del coq_threads[worker_key]
-                print("killed {}".format(worker))
-            else:
-                print("worker didn't die!")
+            stop_worker(worker_key, worker, "user-issued kill command")
         else:
-            print("no worker to kill")
+            log.write("no worker to kill")
 
 class CoqUpdateOutputBufferCommand(sublime_plugin.TextCommand):
     def run(self, edit, text=""):
@@ -539,10 +596,14 @@ class CoqViewEventListener(sublime_plugin.EventListener):
         worker_key = view.id()
         worker = coq_threads.get(worker_key, None)
         if worker:
-            worker.mark_dirty()
+            # NOTE: While not immediately obvious, I think that reading the
+            # `desired_high_water_mark` proprty is safe here, since only the
+            # main thread changes that property via `seek`.
+            text = view.substr(sublime.Region(0, worker.desired_high_water_mark))
+            worker.mark_dirty(text=text)
 
     def on_close(self, view):
         for view_id, worker in list(coq_threads.items()):
             if worker.display.was_closed_by_user():
-                print("worker {} was closed??".format(worker))
-                worker.view.run_command("coq_kill")
+                log.write("worker {} was closed??".format(worker))
+                stop_worker(worker_key, worker, "view closed by user")
