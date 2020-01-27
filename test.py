@@ -168,6 +168,12 @@ if __name__ == "__main__":
             print(proc.current_goal())
             proc.append("Qed.")
             print(proc.current_goal())
+
+            proc.append('SearchAbout "+".')
+            res = proc.current_goal()
+            print(res)
+            assert "plus_n_O" in res
+
         finally:
             proc.stop()
 

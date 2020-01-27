@@ -204,12 +204,17 @@ def format_response(xml, coq_version):
         forall r : record_name, In r rs &lt;-&gt; refers_to (EPlus e1 e2) r}</string></goal></list><list/></goals></option></value>
     """
 
+    messages = []
     for x in xml:
+        if x.tag == "feedback":
+            for msg in x.iter("message"):
+                messages.append(text_of(msg))
         if x.tag == "value":
             if x.attrib.get("val") != "good":
                 raise CoqException(text_of(x))
             goals = list(x.iter("goal"))
             output = "Goals: {}\n\n".format(len(goals))
+            output += "\n".join(messages)
             if goals:
                 # from xml import etree
                 # print("\n".join(ET.tostring(g).decode("UTF-8") for g in goals))
