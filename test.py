@@ -90,7 +90,8 @@ def test_rewind_past_error(path, version):
     proc = coq.CoqBot(
         coq_install_dir=path,
         coq_version=version,
-        extra_args=["-q"]) # -q: do not load rcfile
+        extra_args=["-q"], # -q: do not load rcfile
+        verbose=True)
     try:
         proc.append("Theorem foo : True /\\ True.")
         proc.append("Proof.")
@@ -145,7 +146,8 @@ if __name__ == "__main__":
         proc = coq.CoqBot(
             coq_install_dir=path,
             coq_version=version,
-            extra_args=["-q"]) # -q: do not load rcfile
+            extra_args=["-q"], # -q: do not load rcfile
+            verbose=True)
         try:
             text = """
                 Record R := { field : nat }.

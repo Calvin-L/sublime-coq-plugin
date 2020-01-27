@@ -16,7 +16,7 @@ from . import util
 
 class CoqtopProc(object):
 
-    def __init__(self, coq_install_dir, coq_version, extra_args=(), working_dir=None):
+    def __init__(self, coq_install_dir, coq_version, extra_args=(), working_dir=None, verbose=False):
         """
         Spawns a new coqtop process and creates pipes for interaction.
         """
@@ -45,6 +45,8 @@ class CoqtopProc(object):
                 with open(project_file, "r") as f:
                     cmd.extend(shlex.split(f.read()))
 
+        self.verbose = verbose
+
         print("Starting `{}` in {}".format(" ".join(cmd), working_dir))
         self.proc = subprocess.Popen(
             cmd,
@@ -52,6 +54,10 @@ class CoqtopProc(object):
             cwd=working_dir,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE)
+
+    def print(self, value):
+        if self.verbose:
+            print(value)
 
     def find_coqproject_file(self, dir):
         if dir.endswith("/"):
@@ -73,12 +79,12 @@ class CoqtopProc(object):
 
         if text[-1] != "\n":
             text += "\n"
-        # print("sending: {}".format(text.encode("unicode-escape")))
+        self.print("sending: {}".format(text.encode("unicode-escape")))
 
         # Send
         self.proc.stdin.write(text.encode("ascii"))
         self.proc.stdin.flush()
-        # print("sent")
+        self.print("sent")
 
         # Recieve until we find <value>...</value>
         xm = util.XMLMuncher()
@@ -88,9 +94,9 @@ class CoqtopProc(object):
             try:
                 response = buf.decode("ascii")
             except UnicodeDecodeError as e:
-                # print("{}".format(list("{:x}".format(b) for b in buf)))
+                self.print("{}".format(list("{:x}".format(b) for b in buf)))
                 raise e
-            # print("got partial response: {}".format(response))
+            self.print("got partial response: {}".format(response))
             if not response:
                 raise Exception("coqtop died!")
             for tag in xm.process(response):
@@ -98,7 +104,7 @@ class CoqtopProc(object):
                 yield xml
                 if xml.tag == "value":
                     done = True
-                    # print("--- DONE ---")
+                    self.print("--- DONE ---")
 
     def stop(self):
         """
@@ -229,12 +235,14 @@ class CoqException(Exception):
 
 class CoqBot(object):
 
-    def __init__(self, coq_install_dir, coq_version, extra_args=(), working_dir=None):
+    def __init__(self, coq_install_dir, coq_version, extra_args=(), working_dir=None, verbose=False):
+        self.verbose = verbose
         self.coqtop = CoqtopProc(
             coq_install_dir=coq_install_dir,
             coq_version=coq_version,
             extra_args=extra_args,
-            working_dir=working_dir)
+            working_dir=working_dir,
+            verbose=verbose)
         self.coq_version = coq_version
         self.cmds_sent = [] # list of (command, state_id_before_command)
 
@@ -244,6 +252,10 @@ class CoqBot(object):
                 self.state_id = int(parsed.find(".//state_id").attrib.get("val"))
         if self.state_id is None:
             raise Exception("did not get an initial state ID from coqtop")
+
+    def print(self, value):
+        if self.verbose:
+            print(value)
 
     def append(self, text, start=0):
         """Send the first command in `text[start:]` to Coq.
@@ -301,10 +313,10 @@ class CoqBot(object):
                 if self.coq_version >= (8,5):
                     # pr(parsed)
                     # pr(parsed.find(".//state_id"))
-                    # print(repr(parsed.find(".//state_id").attrib))
-                    # print(repr(parsed.find(".//state_id").attrib.get("val")))
+                    self.print(repr(parsed.find(".//state_id").attrib))
+                    self.print(repr(parsed.find(".//state_id").attrib.get("val")))
                     state_id = int(parsed.find(".//state_id").attrib.get("val"))
-                    # print("GOT STATE ID: {}".format(state_id))
+                    self.print("GOT STATE ID: {}".format(state_id))
                 self.cmds_sent.append((coq_cmd, self.state_id))
                 self.state_id = state_id
 
@@ -317,7 +329,7 @@ class CoqBot(object):
         focused goal.
         """
 
-        # print("asking for goal")
+        self.print("asking for goal")
         if self.coq_version >= (8,5):
             response = self.coqtop.send('<call val="Goal"><unit/></call>')
         else:
