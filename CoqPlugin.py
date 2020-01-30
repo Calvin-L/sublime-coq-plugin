@@ -3,24 +3,16 @@ Sublime Text 3 plugin for Coq.
 """
 
 # builtin modules
-import collections
 import contextlib
 import os.path
-import queue
-import re
-import shlex
-import string
-import subprocess
 import threading
 import time
-import xml.etree.ElementTree as ET
 
 # sublime
 import sublime
 import sublime_plugin
 
 # local modules
-from . import util
 from . import coq
 
 # relevant
