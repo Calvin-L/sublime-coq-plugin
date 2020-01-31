@@ -13,6 +13,10 @@ git clone 'this-repo'
 
 You can find the `sublime-text-folder/Packages` folder from Sublime Text by going to Preferences -> Browse Packages.
 
+NOTE: This plugin expects to be in a folder named `sublime-coq-plugin` in your packages folder.  The plugin will still work if you rename the folder, but the menu entries to open the settings and keyboard mappings may not work properly.
+
+You may need to tell the plugin where to find Coq on your system.  Modify your plugin-specific user settings (Preferences -> Package Settings -> CoqInteractive -> Settings--User).  You should copy and modify settings from the default file (Preferences -> Package Settings -> CoqInteractive -> Settings--Default).
+
 ## Usage
 
 ```
@@ -22,7 +26,6 @@ shift+ctrl+k: kill coqtop
 
 ## Known Issues / TODO
 
- - There aren't really any settings available, so you might need to modify CoqPlugin.py on your own
  - The highlighting for the proven region is really ugly. (I want some way of highlighting that colors the background without removing other syntax highlighting, but that doesn't seem possible in Sublime.)
  - Custom notations using the `.` symbol cause problems
  - I have no idea what happens if you duplicate the view in which you are interacting with Coq

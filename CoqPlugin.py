@@ -36,7 +36,6 @@ from . import coq
 
 # COQ_MAJOR_VERSION = (8,5)
 COQ_MAJOR_VERSION = (8,9)
-COQTOP_PATH = "/usr/local/bin/"
 
 TODO_SCOPE_NAME = "meta.coq.todo"
 TODO_FLAGS = 0 # sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
@@ -342,7 +341,7 @@ class CoqWorker(threading.Thread):
     sends responses.
     """
 
-    def __init__(self, display, file_path=None):
+    def __init__(self, display, coq_install_dir, file_path=None):
         super().__init__(daemon=True)
         self.display = display
 
@@ -350,16 +349,15 @@ class CoqWorker(threading.Thread):
         if file_path is not None:
             working_dir = os.path.dirname(file_path)
 
-        coqtop_path = COQTOP_PATH
-        while coqtop_path.endswith("/"):
-            coqtop_path = coqtop_path[:-1]
-        while coqtop_path.endswith("bin"):
-            coqtop_path = coqtop_path[:-3]
-        while coqtop_path.endswith("/"):
-            coqtop_path = coqtop_path[:-1]
+        while coq_install_dir.endswith("/"):
+            coq_install_dir = coq_install_dir[:-1]
+        while coq_install_dir.endswith("bin"):
+            coq_install_dir = coq_install_dir[:-3]
+        while coq_install_dir.endswith("/"):
+            coq_install_dir = coq_install_dir[:-1]
 
         self.coq = coq.CoqBot(
-            coq_install_dir=coqtop_path,
+            coq_install_dir=coq_install_dir,
             coq_version=COQ_MAJOR_VERSION,
             working_dir=working_dir)
 
@@ -549,9 +547,11 @@ class CoqCommand(sublime_plugin.TextCommand):
         worker_key = self.view.id()
         worker = coq_threads.get(worker_key, None)
         if not worker:
+            settings = sublime.load_settings("CoqInteractive.sublime-settings")
             worker = CoqWorker(
-                display   = InlinePhantomDisplay(self.view),
-                file_path = self.view.file_name())
+                display         = InlinePhantomDisplay(self.view),
+                coq_install_dir = settings.get("coq_install_dir"),
+                file_path       = self.view.file_name())
             coq_threads[worker_key] = worker
             worker.start()
             log.write("spawned worker {} for view {}".format(worker, worker_key))

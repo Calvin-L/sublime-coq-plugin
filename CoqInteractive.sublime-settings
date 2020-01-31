@@ -1,0 +1,5 @@
+{
+    // Location of your Coq installation.  The plugin expects to find Coq as
+    // {coq_install_dir}/bin/coqidetop or {coq_install_dir}/bin/coqtop.
+    "coq_install_dir": "/usr/local",
+}
