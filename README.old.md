@@ -8,7 +8,7 @@ There is [a different sublime-coq plugin](https://packagecontrol.io/packages/Coq
 
 ```
 cd 'sublime-text-folder/Packages'
-git clone 'this-repo'
+git clone https://github.com/Calvin-L/sublime-coq-plugin.git
 ```
 
 You can find the `sublime-text-folder/Packages` folder from Sublime Text by going to Preferences -> Browse Packages.
