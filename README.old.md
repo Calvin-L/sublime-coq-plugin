@@ -25,6 +25,5 @@ shift+ctrl+k: kill coqtop
  - There aren't really any settings available, so you might need to modify CoqPlugin.py on your own
  - The highlighting for the proven region is really ugly. (I want some way of highlighting that colors the background without removing other syntax highlighting, but that doesn't seem possible in Sublime.)
  - Custom notations using the `.` symbol cause problems
- - Keyboard bindings only exist for OSX
  - I have no idea what happens if you duplicate the view in which you are interacting with Coq
  - Sublime Text 2 is not supported
