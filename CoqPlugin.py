@@ -32,15 +32,21 @@ from . import coq
 # relevant to future versions?
 # https://github.com/coq/coq/blob/master/dev/doc/xml-protocol.md
 
+# Regarding translucent colors in Sublime:
+# A region with the name "region.[color]ish" preserves foreground syntax
+# highlighting [1,2], as of build 3148.
+# [1]: https://forum.sublimetext.com/t/dev-build-3153/33014/25
+# [2]: https://www.sublimetext.com/3dev
+
 # --------------------------------------------------------- Constants
 
 # COQ_MAJOR_VERSION = (8,5)
 COQ_MAJOR_VERSION = (8,9)
 
-TODO_SCOPE_NAME = "meta.coq.todo"
-TODO_FLAGS = 0 # sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
-DONE_SCOPE_NAME = "meta.coq.proven"
-DONE_FLAGS = 0 # sublime.DRAW_SQUIGGLY_UNDERLINE | sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE
+TODO_SCOPE_NAME = "region.yellowish"
+TODO_FLAGS = sublime.DRAW_NO_OUTLINE # sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
+DONE_SCOPE_NAME = "region.greenish"
+DONE_FLAGS = sublime.DRAW_NO_OUTLINE # sublime.DRAW_SQUIGGLY_UNDERLINE | sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE
 
 # --------------------------------------------------------- Feedback Display
 
