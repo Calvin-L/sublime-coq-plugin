@@ -1,7 +1,34 @@
 # Sublime-Coq
 
-This project is _deprecated_! The [community-supported Coq plugin](https://packagecontrol.io/packages/Coq) has reached feature parity with this project. By the time you read this it will likely be far ahead.
+This package provides Coq syntax highlighting and an interactive coqtop plugin for Coq in Sublime Text 3.  The plugin supports Coq versions 8.5 to 8.10.  (It may also support higher versions, but as of this writing 8.10 is the latest.)
 
-This repository contains a Coq plugin that I wrote for myself back in 2014. At the time, there was no Coq plugin for Sublime (only syntax highlighting). While I still like this plugin very much (it has slightly prettier output and simpler interaction), I recommend everyone else use the community-supported version for a more portable and stable experience.
+I have been maintaining this plugin since 2014.  It has some advantages and disadvantages compared to the [community-supported Coq plugin](https://packagecontrol.io/packages/Coq) that you will find in Sublime's Package Control.  The main advantage is that Coq processing happens off the main thread, making the plugin much snappier.  I also regularly test support for all the versions of Coq this plugin claims to support.
 
-The original README for this project is in the file `README.old.md`.
+## Install
+
+There is [a different sublime-coq plugin](https://packagecontrol.io/packages/Coq) in [Package Control](https://sublime.wbond.net/). That is NOT this one. This one is different.
+
+```
+cd 'sublime-text-folder/Packages'
+git clone https://github.com/Calvin-L/sublime-coq-plugin.git
+```
+
+You can find the `sublime-text-folder/Packages` folder from Sublime Text by going to Preferences -> Browse Packages.
+
+NOTE: This plugin expects to be in a folder named `sublime-coq-plugin` in your packages folder.  The plugin will still work if you rename the folder, but the menu entries to open the settings and keyboard mappings may not work properly.
+
+You may need to tell the plugin where to find Coq on your system.  Modify your plugin-specific user settings (Preferences -> Package Settings -> CoqInteractive -> Settings--User).  You should copy and modify settings from the default file (Preferences -> Package Settings -> CoqInteractive -> Settings--Default).
+
+## Usage
+
+```
+ctrl+enter: evaluate to (or rewind to) the current cursor
+shift+ctrl+k: kill coqtop
+```
+
+## Known Issues / TODO
+
+ - The highlighting for the proven region is really ugly. (I want some way of highlighting that colors the background without removing other syntax highlighting, but that doesn't seem possible in Sublime.)
+ - Custom notations using the `.` symbol cause problems
+ - I have no idea what happens if you duplicate the view in which you are interacting with Coq
+ - Sublime Text 2 is not supported
