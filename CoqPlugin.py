@@ -601,7 +601,7 @@ class CoqViewEventListener(sublime_plugin.EventListener):
             worker.mark_dirty(text=text)
 
     def on_close(self, view):
-        for view_id, worker in list(coq_threads.items()):
+        for worker_key, worker in list(coq_threads.items()):
             if worker.display.was_closed_by_user():
                 log.write("worker {} was closed??".format(worker))
                 stop_worker(worker_key, worker, "view closed by user")
