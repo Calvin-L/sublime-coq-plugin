@@ -198,7 +198,7 @@ class SplitPaneDisplay(CoqDisplay):
     def __init__(self, view):
         super().__init__(view)
         self.response_view = view.window().new_file()
-        self.response_view.set_syntax_file("Packages/sublime-coq/Coq.tmLanguage")
+        self.response_view.set_syntax_file("Packages/sublime-coq-plugin/Coq.tmLanguage")
         self.response_view.set_scratch(True)
         self.response_view.set_read_only(True)
         name = view.name() or os.path.basename(view.file_name() or "")
