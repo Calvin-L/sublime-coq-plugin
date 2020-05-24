@@ -48,6 +48,10 @@ TODO_FLAGS = sublime.DRAW_NO_OUTLINE # sublime.DRAW_NO_FILL | sublime.DRAW_NO_OU
 DONE_SCOPE_NAME = "region.greenish"
 DONE_FLAGS = sublime.DRAW_NO_OUTLINE # sublime.DRAW_SQUIGGLY_UNDERLINE | sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE
 
+# Which display style to use if the user's settings specify an unrecognized
+# view style.
+FALLBACK_DISPLAY_STYLE = "inline"
+
 # --------------------------------------------------------- Feedback Display
 
 """ !!! IMPORTANT NOTE !!!
@@ -297,6 +301,13 @@ class InlinePhantomDisplay(CoqDisplay):
                 region=sublime.Region(goal_pos, goal_pos),
                 content=self.format_goal(goal),
                 layout=sublime.LAYOUT_BELOW)])
+
+# A "registry" of CoqDisplay subclasses for the "view_style" setting.  Each
+# constructor should take a single `view` argument (in addition to `self`).
+DISPLAY_CLASSES_BY_NAME = {
+    "split": SplitPaneDisplay,
+    "inline": InlinePhantomDisplay,
+}
 
 # --------------------------------------------------------- Logging
 
@@ -554,8 +565,20 @@ class CoqCommand(sublime_plugin.TextCommand):
         worker = coq_threads.get(worker_key, None)
         if not worker:
             settings = sublime.load_settings("CoqInteractive.sublime-settings")
+
+            view_style = settings.get("view_style", FALLBACK_DISPLAY_STYLE)
+            if view_style not in DISPLAY_CLASSES_BY_NAME:
+                sublime.error_message('Your "view_style" setting specifies an '
+                    + "unknown view style ({!r}). ".format(view_style)
+                    + "Please use one of the official view styles: "
+                    + ", ".join(DISPLAY_CLASSES_BY_NAME.keys())
+                    + ". The plugin will now proceed using the "
+                    + FALLBACK_DISPLAY_STYLE + " style.")
+                view_style = FALLBACK_DISPLAY_STYLE
+
+            DisplayClass = DISPLAY_CLASSES_BY_NAME[view_style]
             worker = CoqWorker(
-                display         = InlinePhantomDisplay(self.view),
+                display         = DisplayClass(self.view),
                 coq_install_dir = settings.get("coq_install_dir"),
                 file_path       = self.view.file_name())
             coq_threads[worker_key] = worker
