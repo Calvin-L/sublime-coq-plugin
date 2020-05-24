@@ -10,7 +10,7 @@
     //    proven region.
     //
     //  - "split": the output is shown in a separate tab.  The plugin will try
-    //    to split the display to put the tab to the right of the tab with your
+    //    to split the Sublime Text window to put the tab to the side of your
     //    open Coq file.
     //
     "view_style": "inline",
