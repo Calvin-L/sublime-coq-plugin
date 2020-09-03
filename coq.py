@@ -14,6 +14,8 @@ import shlex
 from . import util
 
 
+CHARSET = "utf-8"
+
 class CoqtopProc(object):
 
     def __init__(self, coq_install_dir, coq_version, extra_args=(), working_dir=None, verbose=False):
@@ -82,7 +84,7 @@ class CoqtopProc(object):
         self.print("sending: {}".format(text.encode("unicode-escape")))
 
         # Send
-        self.proc.stdin.write(text.encode("ascii"))
+        self.proc.stdin.write(text.encode(CHARSET))
         self.proc.stdin.flush()
         self.print("sent")
 
@@ -90,9 +92,11 @@ class CoqtopProc(object):
         xm = util.XMLMuncher()
         done = False
         while not done:
+            # TODO: what happens if a multi-byte character gets split across
+            # two calls to read()?
             buf = self.proc.stdout.read(1024)
             try:
-                response = buf.decode("ascii")
+                response = buf.decode(CHARSET)
             except UnicodeDecodeError as e:
                 self.print("{}".format(list("{:x}".format(b) for b in buf)))
                 raise e
