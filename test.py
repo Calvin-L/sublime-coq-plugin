@@ -3,7 +3,7 @@
 """
 Run this script from one folder up with
 
-    $ python3 -m sublime-coq.test
+    $ python3 -m sublime-coq-plugin.test
 
 This script requires the Nix package manger (https://nixos.org/nix/).  It uses
 Nix to wrangle multiple versions of Coq to test the plugin's version
@@ -133,6 +133,88 @@ def test_rewind_past_error(path, version):
     finally:
         proc.stop()
 
+def test1(path, version):
+    proc = coq.CoqBot(
+        coq_install_dir=path,
+        coq_version=version,
+        extra_args=["-q"], # -q: do not load rcfile
+        verbose=True)
+    try:
+        text = """
+            Record R := { field : nat }.
+            Definition x := Build_R 0.
+            Definition y := x.(field)."""
+        cmds, _ = send_all(proc, text)
+        assert len(cmds) == 3, "tokenization gave us {} steps instead of 3".format(len(cmds))
+
+        proc.append("Theorem foo : False \\/ True.")
+        proc.append("Proof.")
+        print(proc.current_goal())
+        cmds, _ = send_all(proc, " - intuition.")
+        assert len(cmds) == 2, "tokenization gave us {} steps instead of 2".format(len(cmds))
+        print(proc.current_goal())
+        proc.rewind_to(len(text) + 40)
+        proc.append("   right.")
+        proc.append("   constructor.")
+        print(proc.current_goal())
+        proc.append("Qed.")
+        print(proc.current_goal())
+
+        proc.append('SearchAbout "+".')
+        res = proc.current_goal()
+        print(res)
+        assert "plus_n_O" in res
+
+    finally:
+        proc.stop()
+
+TESTS = [
+    """
+    Require Import Omega.
+    Require Import List.
+    Import ListNotations.
+
+    Definition nats : list nat := [1; 2; 3; 4].
+
+    (*
+    Definition ElemOf {T} (l : list T) : Type :=
+      { x : T | In x l }.
+
+    Lemma nats_gtz:
+      forall x : ElemOf nats,
+        x > 0.
+        (* butts *)
+    *)
+
+    Notation "'forall' x 'in' l ',' P" :=
+      (forall x, In x l -> P)
+      (at level 200) : type_scope.
+
+    Lemma nats_gtz:
+      forall x in nats,
+        x > 0.
+    Proof.
+      unfold nats.
+      intro x.
+      simpl.
+      intuition omega.
+    Qed.
+    """
+]
+
+def test_trivial_success(path, version):
+    for inp in TESTS:
+        proc = coq.CoqBot(
+            coq_install_dir=path,
+            coq_version=version,
+            extra_args=["-q"], # -q: do not load rcfile
+            verbose=True)
+        try:
+            send_all(proc, inp)
+            print(proc.current_goal())
+        finally:
+            proc.stop()
+
 if __name__ == "__main__":
     test_xml_muncher()
 
@@ -145,38 +227,6 @@ if __name__ == "__main__":
         print("=" * 40 + " COQ VERSION: {}.{}".format(*version))
         path = path_to_coqtop(version)
 
-        proc = coq.CoqBot(
-            coq_install_dir=path,
-            coq_version=version,
-            extra_args=["-q"], # -q: do not load rcfile
-            verbose=True)
-        try:
-            text = """
-                Record R := { field : nat }.
-                Definition x := Build_R 0.
-                Definition y := x.(field)."""
-            cmds, _ = send_all(proc, text)
-            assert len(cmds) == 3, "tokenization gave us {} steps instead of 3".format(len(cmds))
-
-            proc.append("Theorem foo : False \\/ True.")
-            proc.append("Proof.")
-            print(proc.current_goal())
-            cmds, _ = send_all(proc, " - intuition.")
-            assert len(cmds) == 2, "tokenization gave us {} steps instead of 2".format(len(cmds))
-            print(proc.current_goal())
-            proc.rewind_to(len(text) + 40)
-            proc.append("   right.")
-            proc.append("   constructor.")
-            print(proc.current_goal())
-            proc.append("Qed.")
-            print(proc.current_goal())
-
-            proc.append('SearchAbout "+".')
-            res = proc.current_goal()
-            print(res)
-            assert "plus_n_O" in res
-
-        finally:
-            proc.stop()
-
+        # test1(path, version)
+        test_trivial_success(path, version)
         test_rewind_past_error(path, version)
