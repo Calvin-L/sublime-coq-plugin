@@ -10,6 +10,7 @@ import re
 import subprocess
 import xml.etree.ElementTree as ET
 import shlex
+import codecs
 
 from . import util
 
@@ -57,6 +58,8 @@ class CoqtopProc(object):
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE)
 
+        self.decoder = codecs.getincrementaldecoder(CHARSET)()
+
     def print(self, value):
         if self.verbose:
             print(value)
@@ -92,11 +95,9 @@ class CoqtopProc(object):
         xm = util.XMLMuncher()
         done = False
         while not done:
-            # TODO: what happens if a multi-byte character gets split across
-            # two calls to read()?
             buf = self.proc.stdout.read(1024)
             try:
-                response = buf.decode(CHARSET)
+                response = self.decoder.decode(buf)
             except UnicodeDecodeError as e:
                 self.print("{}".format(list("{:x}".format(b) for b in buf)))
                 raise e
