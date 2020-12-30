@@ -87,3 +87,11 @@ Inductive MyType :=
   | CaseFalse
 (*        ^ - constant *)
   .
+
+Class Inhabited T := { arbitrary : T }.
+(* ^ keyword *)
+(*    ^ entity.name *)
+
+Instance inhabited_unit : Inhabited unit := { arbitrary := tt }.
+(* ^ keyword *)
+(*          ^ entity.name *)

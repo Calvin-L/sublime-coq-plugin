@@ -65,7 +65,7 @@
 
         <dict>
             <key>match</key>
-            <string>\b(Fixpoint|CoFixpoint|Definition|Let|Axiom|Hypothesis|Variable|Parameter|with|fix|Structure|Record)\s+([a-zA-Z_][a-zA-Z0-9_']*)</string>
+            <string>\b(Fixpoint|CoFixpoint|Definition|Let|Axiom|Hypothesis|Variable|Parameter|with|fix|Structure|Record|Class|Instance)\s+([a-zA-Z_][a-zA-Z0-9_']*)</string>
             <key>comment</key>
             <string>Definitions</string>
             <key>captures</key>
