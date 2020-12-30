@@ -633,3 +633,25 @@ class CoqViewEventListener(sublime_plugin.EventListener):
             if worker.display.was_closed_by_user():
                 log.write("worker {} was closed??".format(worker))
                 stop_worker(worker_key, worker, "view closed by user")
+
+def plugin_unloaded():
+    """Hook called by Sublime just before the plugin is unloaded.
+
+    See: https://www.sublimetext.com/docs/3/api_reference.html#plugin_lifecycle
+
+    This hook is mostly useful for development.  When the plugin is reloaded
+    because the source code changed, it is helpful to have it cleanly shut down
+    active Coq sessions.
+
+    The docs are incredibly vague about what this hook is allowed to do and
+    what it can rely on from Sublime.  I think we can trust that:
+     - This hook is called on the main thread.
+     - This hook can do the same things as a normal callback.
+
+    But:
+     - Sublime will not always wait for this hook to finish; we can only do a
+       best-effort cleanup.
+    """
+
+    for worker_key, worker in list(coq_threads.items()):
+        stop_worker(worker_key, worker, "plugin unloaded")
