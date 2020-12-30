@@ -526,14 +526,19 @@ class CoqWorker(threading.Thread):
             self.high_water_mark = rewind_point
             self.change_desired_high_water_mark(to_idx, rewind_point)
 
-        try:
-            goal = self.coq.current_goal()
-        except coq.CoqException as e:
-            goal = "Error: {}".format(str(e))
-            self.change_desired_high_water_mark(to_idx, self.high_water_mark)
+        # This read ought to be safe even without lock acquisition.
+        ultimate_target = self.desired_high_water_mark
 
-        self.display.set_marks(self.high_water_mark, self.desired_high_water_mark)
-        self.display.show_goal(goal)
+        if self.high_water_mark == ultimate_target:
+
+            try:
+                goal = self.coq.current_goal()
+            except coq.CoqException as e:
+                goal = "Error: {}".format(str(e))
+                self.change_desired_high_water_mark(to_idx, self.high_water_mark)
+
+            self.display.set_marks(self.high_water_mark, ultimate_target)
+            self.display.show_goal(goal)
 
 # --------------------------------------------------------- Worker table
 
