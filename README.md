@@ -31,3 +31,4 @@ shift+ctrl+k: kill coqtop
  - Custom notations using the `.` symbol cause problems
  - I have no idea what happens if you duplicate the view in which you are interacting with Coq
  - Sublime Text 2 is not supported
+ - The current goal takes a long time to display when there are many goals, even if the current goal is very small
