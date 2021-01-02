@@ -568,6 +568,11 @@ class CoqCommand(sublime_plugin.TextCommand):
             return
         worker_key = self.view.id()
         worker = coq_threads.get(worker_key, None)
+
+        if worker and not worker.is_alive():
+            stop_worker(worker_key, worker, "worker has crashed")
+            worker = None
+
         if not worker:
             settings = sublime.load_settings("CoqInteractive.sublime-settings")
 
