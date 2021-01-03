@@ -516,13 +516,7 @@ class CoqWorker(threading.Thread):
                 self.high_water_mark += cmd_len
 
         else:
-
-            try:
-                rewind_point = self.coq.rewind_to(to_idx)
-            except coq.CoqException as e:
-                # The exception will be caught and displayed when we try to
-                # show the current goal later.
-                pass
+            rewind_point = self.coq.rewind_to(to_idx)
             self.high_water_mark = rewind_point
             self.change_desired_high_water_mark(to_idx, rewind_point)
 
@@ -535,9 +529,10 @@ class CoqWorker(threading.Thread):
                 goal = self.coq.current_goal()
             except coq.CoqException as e:
                 goal = "Error: {}".format(str(e))
+                self.high_water_mark = self.coq.tip()
                 self.change_desired_high_water_mark(to_idx, self.high_water_mark)
 
-            self.display.set_marks(self.high_water_mark, ultimate_target)
+            self.display.set_marks(self.high_water_mark, self.high_water_mark)
             self.display.show_goal(goal)
 
 # --------------------------------------------------------- Worker table
