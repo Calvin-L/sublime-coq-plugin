@@ -324,10 +324,13 @@ class Log(object):
 #         self.f = open("/tmp/sublime-coq-plugin.log", "a")
 #     def write(self, value):
 #         now = time.asctime(time.localtime())
-#         self.f.write("[{}, {}]: {}\n".format(
+#         msg = "[{}, {}]: {}".format(
 #             now,
 #             threading.get_ident(),
-#             value))
+#             value)
+#         print(msg)
+#         self.f.write(msg)
+#         self.f.write("\n")
 #         self.f.flush()
 
 log = Log()
