@@ -514,7 +514,6 @@ class CoqWorker(threading.Thread):
                 cmd_len = self.coq.append(text)
             except coq.CoqException as e:
                 log.write("send was rejected ({})".format(e))
-                self.coq.rewind_to(from_idx)
                 self._stop_and_show_error(to_idx, e)
                 return
 

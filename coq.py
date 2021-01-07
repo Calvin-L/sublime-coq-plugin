@@ -338,11 +338,12 @@ class CoqBot(object):
                 to_send = '<call val="interp" id="0">{}</call>'.format(util.xml_encode(coq_cmd))
 
             state_id = get_state_id(self._append_and_check_response(to_send))
-            self.cmds_sent.append((coq_cmd, self.state_id))
-            self.state_id = state_id
 
             self.print("sending status query")
             self._append_and_check_response('<call val="Status"><bool val="{force}"/></call>'.format(force="true"))
+
+            self.cmds_sent.append((coq_cmd, self.state_id))
+            self.state_id = state_id
 
         return index_of_end_of_command or 0
 
@@ -389,7 +390,10 @@ class CoqBot(object):
                 break
             count = new_count
 
-        self._rewind_to(index_of_earliest_undone_command)
+        if index_of_earliest_undone_command is not None:
+            self._rewind_to(index_of_earliest_undone_command)
+        else:
+            print("WARNING: cannot rewind to {} (too large)".format(idx))
 
         return count
 
