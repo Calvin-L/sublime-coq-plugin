@@ -279,8 +279,25 @@ class CoqBot(object):
         if self.verbose:
             print(value)
 
+    def _append_and_check_response(self, xml_command):
+        value_tag = None
+        for parsed in self.coqtop.send(xml_command):
+            if parsed.tag == "value":
+                if parsed.attrib.get("val") == "good":
+                    value_tag = parsed
+                else:
+                    print("Error!")
+                    pr(parsed)
+                    error = text_of(parsed).strip()
+                    if not error:
+                        error = "(unknown error)"
+                    raise CoqException(error)
+
+        assert value_tag is not None
+        return value_tag
+
     def append(self, text, start=0):
-        """Queue delivery of the first command in `text[start:]` to Coq.
+        """Send the first command in `text[start:]` to Coq.
 
         Returns the new offset after processing the first command in
         text[start:], such that `text[start:RETURN_VALUE]` is what was sent.
@@ -293,12 +310,6 @@ class CoqBot(object):
         Throws CoqException if Coq reports an error.  Throws other kinds of
         exceptions if there is some problem communicating with the CoqTop
         process.
-
-        NOTE: Because this method asynchronously queues delivery of the sent
-        command, not all errors are reported immediately.  Usually syntax
-        errors are caught here, and semantic errors (such as undefined
-        identifiers) are not caught until the current goal is requested using
-        `current_goal`.  See `current_goal` for more information.
 
         NOTE: To send multiple commands, use a loop.  For instance:
 
@@ -326,23 +337,12 @@ class CoqBot(object):
             else:
                 to_send = '<call val="interp" id="0">{}</call>'.format(util.xml_encode(coq_cmd))
 
-            for parsed in self.coqtop.send(to_send):
-                if parsed.tag != "value":
-                    continue
-                if parsed.attrib.get("val") != "good":
-                    print("Error!")
-                    pr(parsed)
-                    error = text_of(parsed).strip()
-                    if not error:
-                        error = "(unknown error)"
-                    raise CoqException(error)
+            state_id = get_state_id(self._append_and_check_response(to_send))
+            self.cmds_sent.append((coq_cmd, self.state_id))
+            self.state_id = state_id
 
-                state_id = None
-                if self.coq_version >= (8,5):
-                    state_id = get_state_id(parsed)
-                    self.print("GOT STATE ID: {}".format(state_id))
-                self.cmds_sent.append((coq_cmd, self.state_id))
-                self.state_id = state_id
+            self.print("sending status query")
+            self._append_and_check_response('<call val="Status"><bool val="{force}"/></call>'.format(force="true"))
 
         return index_of_end_of_command or 0
 
@@ -351,13 +351,6 @@ class CoqBot(object):
 
         Returns text indicating how many unproven goals remain and showing the
         focused goal.
-
-        If this method throws a CoqException, it indicates that asynchronous
-        processing of a previously `append`-ed command revealed a problem with
-        that command, such as an undefined identifier.  That command and all
-        commands after it have been rewound.  Callers should invoke `tip` to
-        determine the new index.  Since the failed commands have been rewound,
-        rewinding to the new tip would be a no-op.
         """
 
         self.print("asking for goal")
@@ -365,18 +358,7 @@ class CoqBot(object):
             response = self.coqtop.send('<call val="Goal"><unit/></call>')
         else:
             response = self.coqtop.send('<call val="goal"></call>')
-        try:
-            return format_response(response, coq_version=self.coq_version)
-        except _CoqExceptionAtState as e:
-            self.print("goal reports error; rewinding to state={}".format(e.state_id))
-            self._rewind_to_state(e.state_id)
-            raise
-
-    def tip(self):
-        count = 0
-        for cmd in self.sent_buffer():
-            count += len(cmd)
-        return count
+        return format_response(response, coq_version=self.coq_version)
 
     def _rewind_to(self, index_of_earliest_undone_command):
         if index_of_earliest_undone_command == len(self.cmds_sent):
@@ -384,24 +366,9 @@ class CoqBot(object):
         _, state_to_rewind_to = self.cmds_sent[index_of_earliest_undone_command]
         to_send = '<call val="Edit_at"><state_id val="{}"/></call>'.format(state_to_rewind_to)
         for parsed in self.coqtop.send(to_send):
-            if parsed.tag != "value":
-                continue
-            if parsed.attrib.get("val") != "good":
-                print("Error!")
-                pr(parsed)
-                error = text_of(parsed).strip()
-                if not error:
-                    error = "(unknown error)"
-                raise CoqException(error)
+            pass
         self.cmds_sent = self.cmds_sent[0:index_of_earliest_undone_command]
         self.state_id = state_to_rewind_to
-
-    def _rewind_to_state(self, state_id):
-        for i, (cmd, sid) in enumerate(self.cmds_sent):
-            if sid == state_id:
-                self._rewind_to(i)
-                return
-        raise ValueError("no such state: {}".format(state_id))
 
     def rewind_to(self, idx):
         """Rewind to an earlier state.

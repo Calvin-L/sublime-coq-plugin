@@ -512,35 +512,53 @@ class CoqWorker(threading.Thread):
             log.write("unsent: {!r}".format(text))
             try:
                 cmd_len = self.coq.append(text)
-            except Exception as e:
-                self.display.show_goal("Error: {}".format(e))
-                self.change_desired_high_water_mark(to_idx, from_idx)
+            except coq.CoqException as e:
+                log.write("send was rejected ({})".format(e))
+                self.coq.rewind_to(from_idx)
+                self._stop_and_show_error(to_idx, e)
                 return
 
             if cmd_len == 0:
-                self.change_desired_high_water_mark(to_idx, from_idx)
+                if not self.change_desired_high_water_mark(to_idx, from_idx):
+                    print("WARNING: mark update {}-->{} failed".format(to_idx, from_idx))
+                    return
             else:
                 self.high_water_mark += cmd_len
 
-        else:
+        elif from_idx > to_idx:
             rewind_point = self.coq.rewind_to(to_idx)
             self.high_water_mark = rewind_point
-            self.change_desired_high_water_mark(to_idx, rewind_point)
+            if not self.change_desired_high_water_mark(to_idx, rewind_point):
+                print("WARNING: mark update {}-->{} failed".format(to_idx, rewind_point))
+                return
 
         # This read ought to be safe even without lock acquisition.
         ultimate_target = self.desired_high_water_mark
 
+        self.display.set_marks(self.high_water_mark, ultimate_target)
         if self.high_water_mark == ultimate_target:
+            self._show_goal(ultimate_target)
 
-            try:
-                goal = self.coq.current_goal()
-            except coq.CoqException as e:
-                goal = "Error: {}".format(str(e))
-                self.high_water_mark = self.coq.tip()
-                self.change_desired_high_water_mark(to_idx, self.high_water_mark)
+    def _show_goal(self, desired_high_water_mark):
+        log.write("checking goal [target={}]".format(desired_high_water_mark))
 
-            self.display.set_marks(self.high_water_mark, self.high_water_mark)
+        try:
+            goal = self.coq.current_goal()
+        except coq.CoqException as e:
+            self._stop_and_show_error(desired_high_water_mark, e)
+            return
+
+        self.display.show_goal(goal)
+        self.display.set_marks(self.high_water_mark, desired_high_water_mark)
+
+    def _stop_and_show_error(self, desired_high_water_mark, error):
+        tip = self.high_water_mark
+        goal = "Error: {}".format(str(error))
+        if self.change_desired_high_water_mark(desired_high_water_mark, tip):
             self.display.show_goal(goal)
+            self.display.set_marks(tip, tip)
+        else:
+            print("WARNING: mark update {}-->{} failed".format(desired_high_water_mark, tip))
 
 # --------------------------------------------------------- Worker table
 
