@@ -444,6 +444,10 @@ class CoqWorker(threading.Thread):
                 self.monitor.notify_all()
             log.write("Releasing monitor [stop]")
 
+        # Stop the coqtop process.  If the worker thread is stuck waiting on a
+        # response that will never come, this should free it up.
+        self.coq.stop()
+
     def mark_dirty(self, text=None, dirty=True):
         log.write("Waiting on monitor [mark_dirty]...")
         with self.monitor:
