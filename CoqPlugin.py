@@ -47,6 +47,8 @@ TODO_SCOPE_NAME = "region.yellowish"
 TODO_FLAGS = sublime.DRAW_NO_OUTLINE # sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
 DONE_SCOPE_NAME = "region.greenish"
 DONE_FLAGS = sublime.DRAW_NO_OUTLINE # sublime.DRAW_SQUIGGLY_UNDERLINE | sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE
+ERROR_SCOPE_NAME = "region.error.coq"
+ERROR_FLAGS = sublime.DRAW_NO_OUTLINE | sublime.DRAW_SQUIGGLY_UNDERLINE
 
 # Which display style to use if the user's settings specify an unrecognized
 # view style.
@@ -123,6 +125,7 @@ class CoqDisplay(object):
         self.high_water_mark = 0
         self.todo_mark = 0
         self.goal = ""
+        self.bad_ranges = []
         self.should_close = False
         self.is_closed = False
         self.update_scheduled = False
@@ -137,6 +140,10 @@ class CoqDisplay(object):
     def show_goal(self, goal):
         with self._update():
             self.goal = goal
+
+    def set_bad_ranges(self, bad_ranges):
+        with self._update():
+            self.bad_ranges = bad_ranges
 
     def was_closed_by_user(self):
         """This method may only be called from the main thread."""
@@ -173,6 +180,7 @@ class CoqDisplay(object):
             high_water_mark = self.high_water_mark
             todo_mark = self.todo_mark
             goal = self.goal
+            bad_ranges = self.bad_ranges
 
             # No future update is scheduled.  If the state changes after this
             # snapshot, another update will be scheduled to handle it later.
@@ -184,7 +192,7 @@ class CoqDisplay(object):
                 self._cleanup()
                 self.is_closed = True
         else:
-            self._apply(high_water_mark, todo_mark, goal)
+            self._apply(high_water_mark, todo_mark, goal, bad_ranges)
 
     def _cleanup(self):
         """Subclasses must implement this."""
@@ -231,7 +239,7 @@ class SplitPaneDisplay(CoqDisplay):
             window.run_command("close")
             window.focus_view(self.view)
 
-    def _apply(self, high_water_mark, todo_mark, goal):
+    def _apply(self, high_water_mark, todo_mark, goal, bad_ranges):
         self.view.add_regions("Coq", [sublime.Region(0, high_water_mark)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
         if todo_mark > high_water_mark:
             self.view.add_regions("CoqTODO", [sublime.Region(high_water_mark, todo_mark)], scope=TODO_SCOPE_NAME, flags=TODO_FLAGS)
@@ -279,15 +287,19 @@ class InlinePhantomDisplay(CoqDisplay):
     def _cleanup(self):
         self.view.erase_regions("Coq")
         self.view.erase_regions("CoqTODO")
+        self.view.erase_regions("CoqError")
         self.phantoms.update([])
 
-    def _apply(self, high_water_mark, todo_mark, goal):
+    def _apply(self, high_water_mark, todo_mark, goal, bad_ranges):
         self.region = region = sublime.Region(0, high_water_mark)
         self.view.add_regions("Coq", [region], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
         if todo_mark > high_water_mark:
             self.view.add_regions("CoqTODO", [sublime.Region(high_water_mark, todo_mark)], scope=TODO_SCOPE_NAME, flags=TODO_FLAGS)
         else:
             self.view.erase_regions("CoqTODO")
+
+        bad_ranges = [sublime.Region(start, end) for (start, end) in bad_ranges]
+        self.view.add_regions("CoqError", bad_ranges, scope=ERROR_SCOPE_NAME, flags=ERROR_FLAGS)
 
         marker_pos = self.region.end()
         marker_region = sublime.Region(marker_pos, marker_pos)
@@ -507,6 +519,8 @@ class CoqWorker(threading.Thread):
     def step(self, from_idx, to_idx):
         log.write("step called: {} --> {}".format(from_idx, to_idx))
 
+        self.display.set_bad_ranges([])
+
         if from_idx < to_idx:
             text = self.text[from_idx:to_idx]
             log.write("unsent: {!r}".format(text))
@@ -552,8 +566,9 @@ class CoqWorker(threading.Thread):
 
     def _stop_and_show_error(self, desired_high_water_mark, error):
         tip = self.high_water_mark
-        goal = "Error: {}".format(str(error))
+        goal = "Error: {}".format(error)
         if self.change_desired_high_water_mark(desired_high_water_mark, tip):
+            self.display.set_bad_ranges([(start + tip, end + tip) for (start, end) in error.bad_ranges])
             self.display.show_goal(goal)
             self.display.set_marks(tip, tip)
         else:

@@ -246,7 +246,9 @@ def format_response(xml, coq_version):
 
 
 class CoqException(Exception):
-    pass
+    def __init__(self, message, bad_ranges=()):
+        super().__init__(message)
+        self.bad_ranges = bad_ranges
 
 
 class _CoqExceptionAtState(CoqException):
@@ -291,7 +293,15 @@ class CoqBot(object):
                     error = text_of(parsed).strip()
                     if not error:
                         error = "(unknown error)"
-                    raise CoqException(error)
+
+                    bad_ranges = []
+
+                    start = parsed.attrib.get("loc_s")
+                    end = parsed.attrib.get("loc_e")
+                    if start and end:
+                        bad_ranges.append((int(start), int(end)))
+
+                    raise CoqException(error, bad_ranges=bad_ranges)
 
         assert value_tag is not None
         return value_tag
