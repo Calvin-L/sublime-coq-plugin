@@ -348,12 +348,18 @@ class CoqBot(object):
                 to_send = '<call val="interp" id="0">{}</call>'.format(util.xml_encode(coq_cmd))
 
             state_id = get_state_id(self._append_and_check_response(to_send))
-
-            self.print("sending status query")
-            self._append_and_check_response('<call val="Status"><bool val="{force}"/></call>'.format(force="true"))
-
             self.cmds_sent.append((coq_cmd, self.state_id))
             self.state_id = state_id
+
+            self.print("sending status query")
+            try:
+                self._append_and_check_response('<call val="Status"><bool val="{force}"/></call>'.format(force="true"))
+            except CoqException:
+                # If coq accepts the Add command, then it has moved us to a new
+                # state id.  We really do have to tell it we want to go back to
+                # an earlier state if the command fails.
+                self._rewind_to(len(self.cmds_sent) - 1)
+                raise
 
         return index_of_end_of_command or 0
 

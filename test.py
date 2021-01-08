@@ -88,7 +88,7 @@ def send_all(coq, text):
             break
     return (sent_cmds, i)
 
-def test_rewind_past_error(path, version):
+def test_error(path, version):
     proc = coq.CoqBot(
         coq_install_dir=path,
         coq_version=version,
@@ -102,31 +102,10 @@ def test_rewind_past_error(path, version):
 
         try:
             send_all(proc, "  + constructor.")
+            assert False, "expected CoqException"
         except coq.CoqException:
-            # Versions 8.6 and earlier will throw an error eagerly here.
-            # That's fine!  We don't need to test them.  We are interested in
-            # newer versions that accept the change but report the error lazily
-            # when we try to get the goal or rewind to a particular state.
             return
 
-        try:
-            print(proc.current_goal())
-            assert False, "expected CoqException"
-        except coq.CoqException:
-            pass
-
-        try:
-            proc.rewind_to(27+6+8+16+9)
-            assert False, "expected CoqException"
-        except coq.CoqException:
-            pass
-
-        # The previous rewind should fail, but leave us able to rewind to a
-        # good state!
-        proc.rewind_to(27+6+8+16)
-        send_all(proc, "  - constructor.")
-        proc.append("Qed.")
-        print(proc.current_goal())
     except Exception as e:
         print("!!! CAUGHT {}".format(repr(e)))
         raise
@@ -215,6 +194,27 @@ def test_trivial_success(path, version):
         finally:
             proc.stop()
 
+def test_retry_after_error(path, version):
+    proc = coq.CoqBot(
+        coq_install_dir=path,
+        coq_version=version,
+        extra_args=["-q"], # -q: do not load rcfile
+        verbose=True)
+
+    try:
+        proc.append("Definition x := 0.")
+
+        try:
+            proc.append("Definition y := x = True.")
+            assert False, "send should fail"
+        except coq.CoqException:
+            pass
+
+        proc.append("Definition y := x = 1.")
+
+    finally:
+        proc.stop()
+
 if __name__ == "__main__":
     test_xml_muncher()
 
@@ -229,4 +229,5 @@ if __name__ == "__main__":
 
         # test1(path, version)
         test_trivial_success(path, version)
-        test_rewind_past_error(path, version)
+        test_error(path, version)
+        test_retry_after_error(path, version)
