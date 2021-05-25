@@ -40,7 +40,11 @@ def test_xml_muncher():
 
     from . import util
 
-    cases = ["  <val x='b<>'> <hi/> hello </val><bool/> ", "<bool/>"]
+    cases = [
+        "  <val x='b&lt;&gt;'> <hi/> hello </val><bool/> ",
+        "<bool/>",
+        "<foo>&nbsp;</foo>",
+    ]
 
     muncher = util.XMLMuncher()
 
