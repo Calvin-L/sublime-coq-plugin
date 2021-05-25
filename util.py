@@ -11,22 +11,55 @@ def xml_encode(s):
         .replace("'", "&apos;")
         .replace('"', "&quot;"))
 
+class XMLNode(object):
+
+    def __iter__(self):
+        return iter(())
+
+    def flatten(self):
+        q = [self]
+        while q:
+            x = q.pop()
+            yield x
+            q.extend(reversed(list(x)))
+
+    def iter(self, tag_name):
+        for x in self.flatten():
+            if isinstance(x, XMLTag) and x.tag == tag_name:
+                yield x
+
+    def itertext(self):
+        for x in self.flatten():
+            if isinstance(x, XMLText):
+                yield x.string
+
+class XMLTag(XMLNode):
+    __slots__ = ("tag", "attrib", "contents")
+
+    def __init__(self, tag, attrib, contents):
+        self.tag = tag
+        self.attrib = attrib
+        self.contents = contents
+
+    def __iter__(self):
+        return iter(self.contents)
+
+class XMLText(XMLNode):
+    __slots__ = ("string",)
+
+    def __init__(self, string):
+        self.string = string
+
 class _Handler(ContentHandler):
-    __slots__ = ("finished_tags", "buffer", "depth")
+    __slots__ = ("finished_tags", "stack")
 
     def __init__(self):
         self.finished_tags = []
-        self.buffer = io.StringIO()
-        self.depth = 0
-
-    def clear_buffer(self):
-        self.buffer.close()
-        self.buffer = io.StringIO()
+        self.stack = [] # stack of XMLTag
 
     def reset(self):
-        self.clear_buffer()
         self.finished_tags.clear()
-        self.depth = 0
+        self.stack.clear()
 
     # def startDocument(self):
     #     print("startDocument()")
@@ -36,34 +69,21 @@ class _Handler(ContentHandler):
 
     def startElement(self, name, attrs):
         # print("startElement({!r}, {!r})".format(name, attrs))
-        wr = self.buffer.write
-        wr('<')
-        wr(name)
-        for attr_name, attr_value in attrs.items():
-            wr(' ')
-            wr(attr_name)
-            wr('="')
-            wr(xml_encode(attr_value))
-            wr('"')
-        wr('>')
-        self.depth += 1
+        self.stack.append(XMLTag(name, attrs, []))
 
     def endElement(self, name):
         # print("endElement({!r})".format(name))
-        wr = self.buffer.write
-        wr('</')
-        wr(name)
-        wr('>')
-        self.depth -= 1
-        if self.depth == 0:
-            self.finished_tags.append(self.buffer.getvalue())
-            # print(" --> DONE: {}".format(self.finished_tags[-1]))
-            self.clear_buffer()
+        tag = self.stack.pop()
+        if self.stack:
+            self.stack[-1].contents.append(tag)
+        else:
+            self.finished_tags.append(tag)
+            print(" --> DONE: {}".format(self.finished_tags[-1]))
 
     def characters(self, text):
         # print("characters({!r})".format(text))
-        if self.depth > 0:
-            self.buffer.write(xml_encode(text))
+        if len(self.stack) > 0:
+            self.stack[-1].contents.append(XMLText(text))
 
 class XMLMuncher(object):
     __slots__ = ("parser", "handler")

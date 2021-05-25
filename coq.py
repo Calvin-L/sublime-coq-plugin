@@ -8,7 +8,6 @@ Key contents:
 import os.path
 import re
 import subprocess
-import xml.etree.ElementTree as ET
 import shlex
 import codecs
 
@@ -104,10 +103,9 @@ class CoqtopProc(object):
             self.print("got partial response: {}".format(response))
             if not response:
                 raise Exception("coqtop died!")
-            for tag in xm.process(response):
-                xml = ET.fromstring(tag)
+            for xml in xm.process(response):
                 yield xml
-                if xml.tag == "value":
+                if isinstance(xml, util.XMLTag) and xml.tag == "value":
                     done = True
                     self.print("--- DONE ---")
 
@@ -186,20 +184,25 @@ def find_first_coq_command(text, start=0):
 
 
 def pr(e, depth=0):
-    print("{}{} [text={}]".format(" " * depth, e, e.text))
+    print("{}{}".format(" " * depth, e))
     if e:
         for x in e:
             pr(x, depth + 2)
 
 
 def text_of(xml):
-    # WTF ETree API?!?  Why is this not a builtin?
     return "".join(xml.itertext())
+
+
+def find_child(xml, tag_name):
+    for res in xml.iter(tag_name):
+        return res
+    raise ValueError("{} has no {} child".format(xml, tag_name))
 
 
 def get_state_id(xml):
     assert xml.tag == "value"
-    return int(xml.find(".//state_id").attrib.get("val"))
+    return int(find_child(xml, "state_id").attrib.get("val"))
 
 
 def format_response(xml, coq_version):
@@ -273,7 +276,7 @@ class CoqBot(object):
         self.state_id = None
         for parsed in self.coqtop.send('<call val="Init"><option val="none"/></call>'):
             if parsed.tag == "value":
-                self.state_id = int(parsed.find(".//state_id").attrib.get("val"))
+                self.state_id = get_state_id(parsed)
         if self.state_id is None:
             raise Exception("did not get an initial state ID from coqtop")
 
