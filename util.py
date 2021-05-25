@@ -1,5 +1,7 @@
 import io
 import re
+from xml.sax import make_parser
+from xml.sax.handler import ContentHandler
 
 def xml_encode(s):
     return (s
@@ -9,75 +11,80 @@ def xml_encode(s):
         .replace("'", "&apos;")
         .replace('"', "&quot;"))
 
-class XMLMuncher(object):
-    """
-    Splits a series of XML tags (e.g. <a><c/></a><b/>) into a stream
-    (e.g. '<a><c/></a>', '<b/>'). This class is intended to be used
-    to process streams of data. For instance:
-
-    xm = XMLMuncher()
-    xm.process("<b")           # no yields
-    xm.process(">hello</b>")   # yields "<b>hello</b>"
-    """
-
-    # states
-    START     = 0
-    START_TAG = 1
-    IN_TAG    = 2
-    IN_STR1   = 3
-    IN_STR2   = 4
-    DEFAULT   = 5
-
-    TRANSITIONS = {
-        (START,   '<'):   (START_TAG,  1),
-        (DEFAULT, '<'):   (START_TAG,  1),
-        (IN_TAG,  "'"):   (IN_STR1, 0),
-        (IN_TAG,  '"'):   (IN_STR2, 0),
-        (IN_TAG,  '/'):   (IN_TAG, -1),
-        (IN_TAG,  '>'):   (DEFAULT, 0),
-        (IN_STR1, "'"):   (IN_TAG,  0),
-        (IN_STR2, '"'):   (IN_TAG,  0),
-    }
-
-    WHITESPACE = re.compile(r"\s")
+class _Handler(ContentHandler):
+    __slots__ = ("finished_tags", "buffer", "depth")
 
     def __init__(self):
-        self.buf = io.StringIO()
-        self.state = XMLMuncher.START
-        self.open_tag_count = 0
+        self.finished_tags = []
+        self.buffer = io.StringIO()
+        self.depth = 0
+
+    def clear_buffer(self):
+        self.buffer.close()
+        self.buffer = io.StringIO()
 
     def reset(self):
-        self.buf.close()
-        self.__init__()
+        self.clear_buffer()
+        self.finished_tags.clear()
+        self.depth = 0
+
+    # def startDocument(self):
+    #     print("startDocument()")
+
+    # def endDocument(self):
+    #     print("endDocument()")
+
+    def startElement(self, name, attrs):
+        # print("startElement({!r}, {!r})".format(name, attrs))
+        wr = self.buffer.write
+        wr('<')
+        wr(name)
+        for attr_name, attr_value in attrs.items():
+            wr(' ')
+            wr(attr_name)
+            wr('="')
+            wr(xml_encode(attr_value))
+            wr('"')
+        wr('>')
+        self.depth += 1
+
+    def endElement(self, name):
+        # print("endElement({!r})".format(name))
+        wr = self.buffer.write
+        wr('</')
+        wr(name)
+        wr('>')
+        self.depth -= 1
+        if self.depth == 0:
+            self.finished_tags.append(self.buffer.getvalue())
+            # print(" --> DONE: {}".format(self.finished_tags[-1]))
+            self.clear_buffer()
+
+    def characters(self, text):
+        # print("characters({!r})".format(text))
+        if self.depth > 0:
+            self.buffer.write(xml_encode(text))
+
+class XMLMuncher(object):
+    __slots__ = ("parser", "handler")
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.parser = make_parser()
+        self.handler = _Handler()
+        self.parser.setContentHandler(self.handler)
+        self.parser.feed("""
+            <?xml version="1.0"?>
+            <!DOCTYPE coq [
+            <!ENTITY nbsp " ">
+            ]>
+            <coq>
+        """.strip())
+        self.handler.reset()
 
     def process(self, buf):
-        """
-        Append buf, yield any completed XML tags. This is a stateful API, so
-        callers MUST exhaust the generator before making another call to any
-        methods on this class.
-        """
-
-        for char in buf:
-            self.buf.write(char)
-
-            # special case 1: ignore all whitespace
-            if XMLMuncher.WHITESPACE.match(char):
-                continue
-
-            # special case 2: START_TAG immediately transitions to IN_TAG
-            if self.state == XMLMuncher.START_TAG:
-                if char == '/':
-                    self.open_tag_count -= 2
-                self.state = XMLMuncher.IN_TAG
-                continue
-
-            # consult transition table
-            (new_state, inc) = XMLMuncher.TRANSITIONS.get((self.state, char), (self.state, 0))
-            self.state = new_state
-            # print("{} --> {},{}".format(char, self.state, self.open_tag_count))
-            self.open_tag_count += inc
-            if self.state == XMLMuncher.DEFAULT and self.open_tag_count == 0:
-                xml_str = self.buf.getvalue()
-                # print("--> munched {}".format(xml_str))
-                yield xml_str.replace("&nbsp;", " ") # HACK
-                self.reset()
+        self.parser.feed(buf)
+        yield from self.handler.finished_tags
+        self.handler.finished_tags.clear()
