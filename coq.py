@@ -271,7 +271,7 @@ class CoqBot(object):
             working_dir=working_dir,
             verbose=verbose)
         self.coq_version = coq_version
-        self.cmds_sent = [] # list of (command, state_id_before_command)
+        self.cmds_sent = [] # list of (command, state_id_before_command, output_of_command)
 
         self.state_id = None
         for parsed in self.coqtop.send('<call val="Init"><option val="none"/></call>'):
@@ -285,8 +285,17 @@ class CoqBot(object):
             print(value)
 
     def _append_and_check_response(self, xml_command):
+        """Send the given XML string to Coq.
+
+        Returns (feedback_text, value_tag)
+        """
+
         value_tag = None
+        feedback_text = ""
         for parsed in self.coqtop.send(xml_command):
+            if parsed.tag == "feedback":
+                for msg in parsed.iter("message"):
+                    feedback_text += text_of(msg)
             if parsed.tag == "value":
                 if parsed.attrib.get("val") == "good":
                     value_tag = parsed
@@ -307,7 +316,7 @@ class CoqBot(object):
                     raise CoqException(error, bad_ranges=bad_ranges)
 
         assert value_tag is not None
-        return value_tag
+        return (feedback_text, value_tag)
 
     def append(self, text, start=0):
         """Send the first command in `text[start:]` to Coq.
@@ -350,19 +359,25 @@ class CoqBot(object):
             else:
                 to_send = '<call val="interp" id="0">{}</call>'.format(util.xml_encode(coq_cmd))
 
-            state_id = get_state_id(self._append_and_check_response(to_send))
-            self.cmds_sent.append((coq_cmd, self.state_id))
+            feedback_text, value_tag = self._append_and_check_response(to_send)
+            state_id = get_state_id(value_tag)
+            original_state_id = self.state_id
+            self.cmds_sent.append((coq_cmd, original_state_id, feedback_text))
             self.state_id = state_id
 
             self.print("sending status query")
             try:
-                self._append_and_check_response('<call val="Status"><bool val="{force}"/></call>'.format(force="true"))
+                more_feedback_text, _ = self._append_and_check_response('<call val="Status"><bool val="{force}"/></call>'.format(force="true"))
             except CoqException:
                 # If coq accepts the Add command, then it has moved us to a new
                 # state id.  We really do have to tell it we want to go back to
                 # an earlier state if the command fails.
                 self._rewind_to(len(self.cmds_sent) - 1)
                 raise
+
+            # The force can result in more important feedback, which we have to
+            # add to our log.
+            self.cmds_sent[-1] = (coq_cmd, original_state_id, feedback_text + more_feedback_text)
 
         return index_of_end_of_command or 0
 
@@ -378,12 +393,13 @@ class CoqBot(object):
             response = self.coqtop.send('<call val="Goal"><unit/></call>')
         else:
             response = self.coqtop.send('<call val="goal"></call>')
-        return format_response(response, coq_version=self.coq_version)
+        feedback_text = self.cmds_sent[-1][2] if self.cmds_sent else ""
+        return feedback_text + format_response(response, coq_version=self.coq_version)
 
     def _rewind_to(self, index_of_earliest_undone_command):
         if index_of_earliest_undone_command == len(self.cmds_sent):
             return
-        _, state_to_rewind_to = self.cmds_sent[index_of_earliest_undone_command]
+        _, state_to_rewind_to, _ = self.cmds_sent[index_of_earliest_undone_command]
         to_send = '<call val="Edit_at"><state_id val="{}"/></call>'.format(state_to_rewind_to)
         for parsed in self.coqtop.send(to_send):
             pass
@@ -402,7 +418,7 @@ class CoqBot(object):
 
         index_of_earliest_undone_command = None
         count = 0
-        for i, (cmd, state_id) in enumerate(self.cmds_sent):
+        for i, (cmd, state_id, _) in enumerate(self.cmds_sent):
             new_count = count + len(cmd)
             if new_count > idx:
                 index_of_earliest_undone_command = i
@@ -417,7 +433,7 @@ class CoqBot(object):
         return count
 
     def sent_buffer(self):
-        for cmd_text, _ in self.cmds_sent:
+        for cmd_text, _, _ in self.cmds_sent:
             yield cmd_text
 
     def stop(self):
