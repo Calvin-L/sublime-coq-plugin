@@ -410,6 +410,8 @@ class CoqBot(object):
         else:
             response = self.coqtop.send('<call val="goal"></call>')
         feedback_text = self.cmds_sent[-1][2] if self.cmds_sent else ""
+        if feedback_text:
+            feedback_text = feedback_text + "\n\n"
         return feedback_text + format_response(response, coq_version=self.coq_version)
 
     def _rewind_to(self, index_of_earliest_undone_command):
