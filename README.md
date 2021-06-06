@@ -29,9 +29,6 @@ shift+ctrl+k: kill coqtop
 ## Known Issues / TODO
 
  - Custom notations using the `.` symbol cause problems
- - Qualified names can be split up incorrectly (e.g. `Import A.B.C` or
-   `record.(field)`).  Do not instruct the plugin to evaluate to just after a
-   period in a qualified name.
  - I have no idea what happens if you duplicate the view in which you are interacting with Coq
  - Behavior is weird and undefined when the file you are interacting with is
    re-loaded because it changed on disk

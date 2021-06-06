@@ -522,21 +522,20 @@ class CoqWorker(threading.Thread):
         self.display.set_bad_ranges([])
 
         if from_idx < to_idx:
-            text = self.text[from_idx:to_idx]
-            log.write("unsent: {!r}".format(text))
+            log.write("unsent: {!r}".format(self.text[from_idx:to_idx]))
             try:
-                cmd_len = self.coq.append(text)
+                cmd_end = self.coq.append(self.text, start=from_idx, end=to_idx)
             except coq.CoqException as e:
                 log.write("send was rejected ({})".format(e))
                 self._stop_and_show_error(to_idx, e)
                 return
 
-            if cmd_len == 0:
+            if cmd_end == 0:
                 if not self.change_desired_high_water_mark(to_idx, from_idx):
                     print("WARNING: mark update {}-->{} failed".format(to_idx, from_idx))
                     return
             else:
-                self.high_water_mark += cmd_len
+                self.high_water_mark = cmd_end
 
         elif from_idx > to_idx:
             rewind_point = self.coq.rewind_to(to_idx)
@@ -630,7 +629,7 @@ class CoqCommand(sublime_plugin.TextCommand):
             log.write("spawned worker {} for view {}".format(worker, worker_key))
 
         pos = self.view.sel()[0].a
-        text = self.view.substr(sublime.Region(0, pos))
+        text = self.view.substr(sublime.Region(0, pos + 1))
         worker.seek(text=text, pos=pos)
 
 class CoqKillCommand(sublime_plugin.TextCommand):
@@ -664,7 +663,7 @@ class CoqViewEventListener(sublime_plugin.EventListener):
             # NOTE: While not immediately obvious, I think that reading the
             # `desired_high_water_mark` proprty is safe here, since only the
             # main thread changes that property via `seek`.
-            text = view.substr(sublime.Region(0, worker.desired_high_water_mark))
+            text = view.substr(sublime.Region(0, worker.desired_high_water_mark + 1))
             worker.mark_dirty(text=text)
 
     def on_close(self, view):

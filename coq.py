@@ -126,10 +126,10 @@ TOKENS = (
     ("string",        re.compile(r'"[^"]*"')),
     ("whitespace",    re.compile(r'\s+')),
     ("word",          re.compile(r'\w+')),
-    ("fullstop",      re.compile(r'\.(?:\s+|$)')),
+    ("fullstop",      re.compile(r'\.(?=\s|$)')),
 )
 
-def tokens(text, start=0):
+def tokens(text, start=0, end=None):
     i = start
     comment_depth = 0
     while i < len(text):
@@ -143,6 +143,10 @@ def tokens(text, start=0):
                 name = n
                 match = m.group(0)
                 break
+
+        if (end is not None) and (i + len(match) > end):
+            break
+
         if name == "open_comment":
             comment_depth += 1
         elif name == "close_comment":
@@ -156,8 +160,8 @@ def tokens(text, start=0):
 
 BULLET_CHARS = { "-", "+", "*", "{", "}" }
 BULLET_CHARS_REGEX = re.compile(r"\s*[" + re.escape("".join(BULLET_CHARS)) + r"]")
-def find_first_coq_command(text, start=0):
-    """Find the first Coq command in `text[start:]`.
+def find_first_coq_command(text, start=0, end=None):
+    """Find the first Coq command in `text[start:end]`.
 
     The return value is the index one past the end of the command, such that
     `text[start:RETURN_VALUE]` gives the text of the command.
@@ -166,7 +170,7 @@ def find_first_coq_command(text, start=0):
     """
 
     is_first = True
-    for token_pos, token_type, token_len, token_text in tokens(text, start):
+    for token_pos, token_type, token_len, token_text in tokens(text, start, end):
 
         # Bullet characters in Ltac require some care; each is its own command
         if is_first:
@@ -318,11 +322,11 @@ class CoqBot(object):
         assert value_tag is not None
         return (feedback_text, value_tag)
 
-    def append(self, text, start=0):
-        """Send the first command in `text[start:]` to Coq.
+    def append(self, text, start=0, end=None):
+        """Send the first command in `text[start:end]` to Coq.
 
         Returns the new offset after processing the first command in
-        text[start:], such that `text[start:RETURN_VALUE]` is what was sent.
+        text[start:end], such that `text[start:RETURN_VALUE]` is what was sent.
 
         Appends the sent command to this object's "sent buffer" (see
         `rewind_to(...)`).
@@ -332,6 +336,18 @@ class CoqBot(object):
         Throws CoqException if Coq reports an error.  Throws other kinds of
         exceptions if there is some problem communicating with the CoqTop
         process.
+
+        NOTE: In some cases, this procedure does look at characters past `end`,
+        if any exist.  For instance, these two strings need to be interpreted
+        differently:
+
+                                 end
+                                  v
+            'f'   'o'   'o'   '.'   ' '   'b'   'a'   'r'
+            'f'   'o'   'o'   '.'   'b'   'a'   'r'
+
+        The first contains a complete command 'foo.' while the second contains
+        a qualified name 'foo.bar'.
 
         NOTE: To send multiple commands, use a loop.  For instance:
 
@@ -345,7 +361,7 @@ class CoqBot(object):
                     idx = n
         """
 
-        index_of_end_of_command = find_first_coq_command(text, start)
+        index_of_end_of_command = find_first_coq_command(text, start, end)
 
         if index_of_end_of_command:
             coq_cmd = text[start:index_of_end_of_command]
