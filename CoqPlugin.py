@@ -482,11 +482,10 @@ class CoqWorker(threading.Thread):
         log.write("Checking for modifications...")
         index = 0
         self.mark_dirty(dirty=False)
-        buffer = self.text[0 : self.high_water_mark]
         for cmd in self.coq.sent_buffer():
             log.write("Checking command {!r}".format(cmd))
-            new_index = coq.find_first_coq_command(buffer, start=index)
-            if new_index is None or cmd != buffer[index:new_index]:
+            new_index = coq.find_first_coq_command(self.text, start=index)
+            if new_index is None or cmd != self.text[index:new_index]:
                 self.seek(text=None, pos=index)
                 return
             assert new_index > index
