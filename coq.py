@@ -299,7 +299,7 @@ class CoqBot(object):
         for parsed in self.coqtop.send(xml_command):
             if parsed.tag == "feedback":
                 for msg in parsed.iter("message"):
-                    feedback_text += text_of(msg)
+                    feedback_text += text_of(msg) + "\n"
             if parsed.tag == "value":
                 if parsed.attrib.get("val") == "good":
                     value_tag = parsed
@@ -320,7 +320,7 @@ class CoqBot(object):
                     raise CoqException(error, bad_ranges=bad_ranges)
 
         assert value_tag is not None
-        return (feedback_text, value_tag)
+        return (feedback_text.strip(), value_tag)
 
     def append(self, text, start=0, end=None):
         """Send the first command in `text[start:end]` to Coq.
