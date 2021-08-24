@@ -3,6 +3,18 @@
 Key contents:
   - CoqtopProc: thin wrapper for the `coqtop` process (via XML API)
   - CoqBot: high-level wrapper
+  - StoppedException: thrown when an object is not usable because it has been
+    stopped (see "stop-safety" below)
+
+CoqtopProc and CoqBot are both single-threaded classes; concurrent access from
+multiple threads is unsafe.  However, they both support "stop-safety": their
+`stop()` methods my be called concurrently while another thread is calling some
+other method.  Their `stop()` methods may also be called multiple times
+concurrently.  Their `stop()` methods may NOT be called while __init__ is
+running, but they MAY be called if __init__ throws an exception.
+
+When `stop()` is called, in-progress and future calls to other methods MAY
+raise StoppedException.
 """
 
 import os.path
@@ -10,18 +22,32 @@ import re
 import subprocess
 import shlex
 import codecs
+import threading
 
 from . import util
 
 
 CHARSET = "utf-8"
 
+class StoppedException(Exception):
+    pass
+
 class CoqtopProc(object):
+    """A simple wrapper around Coq's XML API.
+
+    This class has two key methods:
+      - send() to send text to Coq and yield XML tags in response
+      - stop() to halt the underlying process
+
+    This class implements "stop-safety" (see above).
+    """
 
     def __init__(self, coq_install_dir, coq_version, extra_args=(), working_dir=None, verbose=False):
         """
         Spawns a new coqtop process and creates pipes for interaction.
         """
+        self.stop_lock = threading.Lock()
+        self.alive = True
 
         if coq_version >= (8,9):
             cmd = [
@@ -80,41 +106,53 @@ class CoqtopProc(object):
         Send the given text to coqtop. Yields XML tags found in the response.
         For proper operation, clients must always exhaust this generator.
         """
+        if not self.alive:
+            raise StoppedException()
 
-        if text[-1] != "\n":
-            text += "\n"
-        self.print("sending: {}".format(text.encode("unicode-escape")))
+        try:
+            if text[-1] != "\n":
+                text += "\n"
+            self.print("sending: {}".format(text.encode("unicode-escape")))
 
-        # Send
-        self.proc.stdin.write(text.encode(CHARSET))
-        self.proc.stdin.flush()
-        self.print("sent")
+            # Send
+            self.proc.stdin.write(text.encode(CHARSET))
+            self.proc.stdin.flush()
+            self.print("sent")
 
-        # Recieve until we find <value>...</value>
-        xm = util.XMLMuncher()
-        done = False
-        while not done:
-            buf = self.proc.stdout.read(1024)
-            try:
-                response = self.decoder.decode(buf)
-            except UnicodeDecodeError as e:
-                self.print("{}".format(list("{:x}".format(b) for b in buf)))
-                raise e
-            self.print("got partial response: {}".format(response))
-            if not response:
-                raise Exception("coqtop died!")
-            for xml in xm.process(response):
-                yield xml
-                if isinstance(xml, util.XMLTag) and xml.tag == "value":
-                    done = True
-                    self.print("--- DONE ---")
+            # Recieve until we find <value>...</value>
+            xm = util.XMLMuncher()
+            done = False
+            while not done:
+                buf = self.proc.stdout.read(1024)
+                try:
+                    response = self.decoder.decode(buf)
+                except UnicodeDecodeError as e:
+                    self.print("{}".format(list("{:x}".format(b) for b in buf)))
+                    raise e
+                self.print("got partial response: {}".format(response))
+                if not response:
+                    raise Exception("coqtop died!")
+                for xml in xm.process(response):
+                    yield xml
+                    if isinstance(xml, util.XMLTag) and xml.tag == "value":
+                        done = True
+                        self.print("--- DONE ---")
+        except:
+            if not self.alive:
+                raise StoppedException()
+            else:
+                raise
 
     def stop(self):
         """
         Stop the underlying coqtop process.
         """
-        p = self.proc
-        if p is not None:
+        with self.stop_lock:
+            p = getattr(self, "proc", None)
+            should_stop = getattr(self, "alive", False)
+            self.alive = False
+
+        if p is not None and should_stop:
             p.terminate()
             ret = p.wait()
             print("coqtop exited with status {}".format(ret))
@@ -265,6 +303,17 @@ class _CoqExceptionAtState(CoqException):
 
 
 class CoqBot(object):
+    """A high-level wrapper around Coq's XML API.
+
+    This class has several key methods:
+      - append() to send the next command in a text buffer to Coq
+      - sent_buffer() to read previously-sent commands
+      - current_goal() to read the current goal
+      - rewind_to() to rewind to an earlier point in the text buffer
+      - stop() to halt the underlying process
+
+    This class implements "stop-safety" (see above).
+    """
 
     def __init__(self, coq_install_dir, coq_version, extra_args=(), working_dir=None, verbose=False):
         self.verbose = verbose

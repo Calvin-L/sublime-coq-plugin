@@ -417,7 +417,8 @@ class CoqWorker(threading.Thread):
                         self.monitor.wait()
                         log.write("Acquired monitor [not-idle]")
                 elif self.state == "STOPPING":
-                    self.coq.stop()
+                    # NOTE: self.coq.stop() is not necessary here; that is done
+                    # in `self.stop()` after entering the "STOPPING" state.
                     self.display.close()
                     self.state = "DEAD"
                 else:
@@ -427,6 +428,10 @@ class CoqWorker(threading.Thread):
             if do_step:
                 try:
                     self.step(*do_step)
+                except coq.StoppedException:
+                    log.write("Worker is aborting due to StoppedException")
+                    assert self.state in ("STOPPING", "DEAD")
+                    continue # next loop iteration will take appropate action
                 except Exception as e:
                     log.write("uncaught exception: {}".format(e))
                     self.stop()
