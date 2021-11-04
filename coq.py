@@ -49,39 +49,56 @@ class CoqtopProc(object):
         self.stop_lock = threading.Lock()
         self.alive = True
 
+        possible_cmds = []
+
         if coq_version >= (8,9):
-            cmd = [
+            possible_cmds.append([
+                os.path.join(coq_install_dir, "bin", "coqidetop.opt"),
+                "-main-channel", "stdfds"])
+            possible_cmds.append([
                 os.path.join(coq_install_dir, "bin", "coqidetop"),
-                "-main-channel", "stdfds"]
+                "-main-channel", "stdfds"])
         elif coq_version >= (8,5):
-            cmd = [
+            possible_cmds.append([
                 os.path.join(coq_install_dir, "bin", "coqtop"),
-                "-main-channel", "stdfds", "-ideslave"]
+                "-main-channel", "stdfds", "-ideslave"])
         elif coq_version >= (8,4):
-            cmd = [
+            possible_cmds.append([
                 os.path.join(coq_install_dir, "bin", "coqtop"),
-                "-ideslave"]
+                "-ideslave"])
         else:
             raise Exception("specified version of coqtop is too old!")
 
-        cmd.extend(extra_args)
-
+        extra_args = list(extra_args)
         if working_dir is not None:
             project_file = self.find_coqproject_file(working_dir)
             if project_file is not None:
                 working_dir = os.path.dirname(project_file)
                 with open(project_file, "r") as f:
-                    cmd.extend(shlex.split(f.read()))
+                    extra_args.extend(shlex.split(f.read()))
+
+        for cmd in possible_cmds:
+            cmd.extend(extra_args)
 
         self.verbose = verbose
 
-        print("Starting `{}` in {}".format(" ".join(cmd), working_dir))
-        self.proc = subprocess.Popen(
-            cmd,
-            bufsize=0,
-            cwd=working_dir,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE)
+        ok = False
+        for cmd in possible_cmds:
+            print("Starting `{}` in {}".format(" ".join(cmd), working_dir))
+            try:
+                self.proc = subprocess.Popen(
+                    cmd,
+                    bufsize=0,
+                    cwd=working_dir,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE)
+                ok = True
+                break
+            except FileNotFoundError:
+                traceback.print_exc()
+
+        if not ok:
+            raise Exception("Coq executable was not found :(")
 
         self.decoder = codecs.getincrementaldecoder(CHARSET)()
 

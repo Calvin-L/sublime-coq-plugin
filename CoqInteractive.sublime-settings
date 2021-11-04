@@ -1,6 +1,7 @@
 {
     // Location of your Coq installation.  The plugin expects to find Coq as
-    // {coq_install_dir}/bin/coqidetop or {coq_install_dir}/bin/coqtop.
+    // {coq_install_dir}/bin/coqidetop.opt, {coq_install_dir}/bin/coqidetop, or
+    // {coq_install_dir}/bin/coqtop.
     "coq_install_dir": "/usr/local",
 
     // The "view style" defines how the plugin presents Coq's interactive
