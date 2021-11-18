@@ -248,6 +248,9 @@ class SplitPaneDisplay(CoqDisplay):
             self.view.erase_regions("CoqTODO")
         self.response_view.run_command("coq_update_output_buffer", {"text": goal})
 
+    def owns_view(self, view):
+        return self.response_view.id() == view.id()
+
 class InlinePhantomDisplay(CoqDisplay):
     def __init__(self, view):
         super().__init__(view)
@@ -314,6 +317,9 @@ class InlinePhantomDisplay(CoqDisplay):
                 region=sublime.Region(goal_pos, goal_pos),
                 content=self.format_goal(goal),
                 layout=sublime.LAYOUT_BELOW)])
+
+    def owns_view(self, view):
+        return False
 
 # A "registry" of CoqDisplay subclasses for the "view_style" setting.  Each
 # constructor should take a single `view` argument (in addition to `self`).
@@ -631,6 +637,10 @@ class CoqCommand(sublime_plugin.TextCommand):
         if "coq" not in self.view.scope_name(0):
             log.write("not inside a coq buffer")
             return
+        for worker in coq_threads.values():
+            if worker.display.owns_view(self.view):
+                log.write("inside a split view display")
+                return
         worker_key = self.view.id()
         worker = coq_threads.get(worker_key, None)
 
