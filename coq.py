@@ -241,6 +241,27 @@ def find_first_coq_command(text, start=0, end=None):
 
     return None
 
+def find_last_coq_command(text, start=0, end=None):
+    """Find the last full Coq command in `text[start:end]`.
+
+    The return value is the index one past the end of the second-to-last
+    command, which is suitable to rewind, or None if there is no full command.
+
+    This is a naive version that parses all of the buffer.
+    """
+
+    end_of_previous = None
+    while True:
+        end_of_current = find_first_coq_command(text, start, end)
+
+        if end_of_current is None:
+            return end_of_previous
+        else:
+            end_of_previous = start
+            start = end_of_current
+
+    return None
+
 
 def pr(e, depth=0):
     print("{}{}".format(" " * depth, e))

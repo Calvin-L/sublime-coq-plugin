@@ -595,6 +595,8 @@ def stop_worker(view_id, worker, reason):
 
 # --------------------------------------------------------- Sublime Commands
 
+coq_settings = dict()
+
 class CoqCommand(sublime_plugin.TextCommand):
     def run(self, edit):
         log.write(self.view.style_for_scope(DONE_SCOPE_NAME))
@@ -623,6 +625,9 @@ class CoqCommand(sublime_plugin.TextCommand):
                     + FALLBACK_DISPLAY_STYLE + " style.")
                 view_style = FALLBACK_DISPLAY_STYLE
 
+            global coq_settings
+            coq_settings = settings
+
             DisplayClass = DISPLAY_CLASSES_BY_NAME[view_style]
             worker = CoqWorker(
                 display         = DisplayClass(self.view),
@@ -632,9 +637,42 @@ class CoqCommand(sublime_plugin.TextCommand):
             worker.start()
             log.write("spawned worker {} for view {}".format(worker, worker_key))
 
-        pos = self.view.sel()[0].a
-        text = self.view.substr(sublime.Region(0, pos + 1))
-        worker.seek(text=text, pos=pos)
+        pos = self.seek_pos(worker)
+        if pos is not None:
+            text = self.view.substr(sublime.Region(0, pos + 1))
+            worker.seek(text=text, pos=pos)
+
+            if coq_settings.get("move_cursor_after_command", True):
+                # In inline mode, move after the phantom block
+                is_inline = isinstance(worker.display, DISPLAY_CLASSES_BY_NAME["inline"])
+                if is_inline and self.view.substr(pos) == "\n":
+                    pos += 1
+                self.view.sel().clear()
+                self.view.sel().add(sublime.Region(pos, pos))
+                self.view.show(pos)
+
+    def seek_pos(self, worker):
+        return self.view.sel()[0].a
+
+class CoqSeekStartCommand(CoqCommand):
+    def seek_pos(self, worker):
+        return 0
+
+class CoqSeekEndCommand(CoqCommand):
+    def seek_pos(self, worker):
+        return self.view.size()
+
+class CoqSeekNextCommand(CoqCommand):
+    def seek_pos(self, worker):
+        pos = worker.high_water_mark
+        buffer = self.view.substr(sublime.Region(pos, self.view.size()))
+        return coq.find_first_coq_command(buffer) + pos
+
+class CoqSeekPrevCommand(CoqCommand):
+    def seek_pos(self, worker):
+        pos = worker.high_water_mark
+        buffer = self.view.substr(sublime.Region(0, pos))
+        return coq.find_last_coq_command(buffer)
 
 class CoqKillCommand(sublime_plugin.TextCommand):
     def run(self, edit):
