@@ -78,7 +78,7 @@ class _Handler(ContentHandler):
             self.stack[-1].contents.append(tag)
         else:
             self.finished_tags.append(tag)
-            print(" --> DONE: {}".format(self.finished_tags[-1]))
+            # print(" --> DONE: {}".format(self.finished_tags[-1]))
 
     def characters(self, text):
         # print("characters({!r})".format(text))
