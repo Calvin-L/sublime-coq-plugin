@@ -15,4 +15,7 @@
     //    open Coq file.
     //
     "view_style": "inline",
+
+    // When sending commands to Coq, move the cursor to the end of the command.
+    "move_cursor_after_command": true
 }
