@@ -623,8 +623,6 @@ def stop_worker(view_id, worker, reason):
 
 # --------------------------------------------------------- Sublime Commands
 
-coq_settings = dict()
-
 class CoqCommand(sublime_plugin.TextCommand):
     def run(self, edit):
         log.write(self.view.style_for_scope(DONE_SCOPE_NAME))
@@ -653,9 +651,6 @@ class CoqCommand(sublime_plugin.TextCommand):
                     + FALLBACK_DISPLAY_STYLE + " style.")
                 view_style = FALLBACK_DISPLAY_STYLE
 
-            global coq_settings
-            coq_settings = settings
-
             DisplayClass = DISPLAY_CLASSES_BY_NAME[view_style]
             worker = CoqWorker(
                 display         = DisplayClass(self.view),
@@ -670,7 +665,8 @@ class CoqCommand(sublime_plugin.TextCommand):
             text = self.view.substr(sublime.Region(0, pos + 1))
             worker.seek(text=text, pos=pos)
 
-            if coq_settings.get("move_cursor_after_command", True):
+            settings = sublime.load_settings("CoqInteractive.sublime-settings")
+            if settings.get("move_cursor_after_command", True):
                 # In inline mode, move after the phantom block
                 is_inline = isinstance(worker.display, DISPLAY_CLASSES_BY_NAME["inline"])
                 if is_inline and self.view.substr(pos) == "\n":
@@ -694,7 +690,8 @@ class CoqSeekNextCommand(CoqCommand):
     def seek_pos(self, worker):
         pos = worker.high_water_mark
         buffer = self.view.substr(sublime.Region(pos, self.view.size()))
-        return coq.find_first_coq_command(buffer) + pos
+        cmdpos = coq.find_first_coq_command(buffer)
+        return cmdpos + pos if cmdpos is not None else None
 
 class CoqSeekPrevCommand(CoqCommand):
     def seek_pos(self, worker):
