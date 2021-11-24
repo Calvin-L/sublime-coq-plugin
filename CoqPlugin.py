@@ -685,11 +685,12 @@ class CoqKillCommand(sublime_plugin.TextCommand):
 
 class CoqUpdateOutputBufferCommand(sublime_plugin.TextCommand):
     def run(self, edit, text=""):
-        self.view.set_read_only(False)
-        self.view.erase(edit, sublime.Region(0, self.view.size()))
-        self.view.insert(edit, 0, text)
-        self.view.show(0)
-        self.view.set_read_only(True)
+        if self.view.substr(sublime.Region(0, self.view.size())) != text:
+            self.view.set_read_only(False)
+            self.view.erase(edit, sublime.Region(0, self.view.size()))
+            self.view.insert(edit, 0, text)
+            self.view.show(0)
+            self.view.set_read_only(True)
 
 # --------------------------------------------------------- Event Management
 
