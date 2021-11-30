@@ -710,6 +710,26 @@ class CoqViewEventListener(sublime_plugin.EventListener):
             worker.mark_dirty(text=text)
 
     def on_close(self, view):
+        # NOTE 2021/11/29: There seems to be a bug in Sublime 4 (build 4121)
+        # where some views have .window() == None even when they are not being
+        # closed---but only during event callbacks like this one.  (Maybe
+        # related: https://github.com/sublimehq/sublime_text/issues/4444 .)
+        #
+        # Approximate steps to reproduce:
+        #   1. Use split Coq display
+        #   2. Start the plugin
+        #   3. Drag the response view to a different tab group
+        #   4. Drag the response view back to its original tab group
+        #   5. During this callback, the response view has window == None, even
+        #      though it is not being closed (some anonymous view is being
+        #      closed).
+        #
+        # The fix is easy enough: take this event callback as a "hint" that
+        # some views have been closed.  At the next opportunity, check for
+        # any views that have been closed.
+        sublime.set_timeout(self._check_for_terminated_views, 1)
+
+    def _check_for_terminated_views(self):
         for worker_key, worker in list(coq_threads.items()):
             if worker.display.was_closed_by_user():
                 log.write("worker {} was closed??".format(worker))
