@@ -404,13 +404,16 @@ class CoqWorker(threading.Thread):
     def run(self):
         while True:
             do_step = None
+            need_check_for_modifications = False
             log.write("Waiting on monitor [run]...")
             with self.monitor:
                 log.write("Acquired monitor! [run]")
                 log.write("Worker state is: {} ({} --> {})".format(self.state, self.high_water_mark, self.desired_high_water_mark))
+                text = self.text
                 if self.state == "ALIVE":
                     if self.dirty:
-                        self.check_for_modifications()
+                        self.dirty = False
+                        need_check_for_modifications = True
                     elif self.desired_high_water_mark != self.high_water_mark:
                         do_step = (self.high_water_mark, self.desired_high_water_mark)
                     else:
@@ -426,16 +429,19 @@ class CoqWorker(threading.Thread):
                     return
 
             self.display.set_marks(self.high_water_mark, self.desired_high_water_mark)
-            if do_step:
-                try:
+
+            try:
+                if need_check_for_modifications:
+                    self._check_for_modifications(text)
+                elif do_step:
                     self.step(*do_step)
-                except coq.StoppedException:
-                    log.write("Worker is aborting due to StoppedException")
-                    assert self.state in ("STOPPING", "DEAD")
-                    continue # next loop iteration will take appropate action
-                except Exception as e:
-                    log.write("uncaught exception: {}".format(e))
-                    self.stop()
+            except coq.StoppedException:
+                log.write("Worker is aborting due to StoppedException")
+                assert self.state in ("STOPPING", "DEAD")
+                continue # next loop iteration will take appropate action
+            except Exception as e:
+                log.write("uncaught exception: {}".format(e))
+                self.stop()
 
     def seek(self, text, pos):
         log.write("Waiting on monitor [seek]...")
@@ -480,20 +486,41 @@ class CoqWorker(threading.Thread):
     def is_alive(self):
         return self.state != "DEAD"
 
-    def check_for_modifications(self):
+    def _check_for_modifications(self, text):
         """
         Called when the user altered the underlying buffer. We might need to
         rewind if they changed something in the proven region.
         """
         log.write("Checking for modifications...")
         index = 0
-        self.mark_dirty(dirty=False)
         for cmd in self.coq.sent_buffer():
             log.write("Checking command {!r}".format(cmd))
-            new_index = coq.find_first_coq_command(self.text, start=index)
-            if new_index is None or cmd != self.text[index:new_index]:
-                self.seek(text=None, pos=index)
+            new_index = coq.find_first_coq_command(text, start=index)
+            if new_index is None or cmd != text[index:new_index]:
+
+                # It's possible that the user did a seek while we were checking
+                # for modifications.  If they did a seek forward, we want to
+                # overwrite their intention---a change in the proven region
+                # requires a rewind.  If they did a seek far enough backwards
+                # though, then there is no need to destroy their intention.
+                #
+                # Nontrivial interaction with self.desired_high_water_mark
+                # requires a lock acquisition---although since we are running
+                # in the worker thread, there is no need to notify anyone (we'd
+                # only be notifying ourselves).
+                log.write("Waiting on monitor [_check_for_modifications]...")
+                with self.monitor:
+                    log.write("Acquired monitor! [_check_for_modifications]")
+                    self.desired_high_water_mark = min(self.desired_high_water_mark, index)
+                    log.write("Releasing monitor [_check_for_modifications]")
+
+                # Regardless of what the user wants, we need to rewind back to
+                # the now-unproven position.
+                while self.high_water_mark > index:
+                    self.step(from_idx=self.high_water_mark, to_idx=index)
+
                 return
+
             assert new_index > index
             index = new_index
         log.write("Check for modifications finished")
