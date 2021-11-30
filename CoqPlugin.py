@@ -216,11 +216,12 @@ class SplitPaneDisplay(CoqDisplay):
         window = view.window()
         ngroups = window.num_groups()
         if ngroups == 1:
+            # At this point self.response_view has focus, so it will be moved
+            # to the new pane automagically.
             window.run_command("new_pane")
         else:
-            group = window.num_groups() - 1
-            if window.get_view_index(view)[1] == group:
-                group -= 1
+            view_group, _ = window.get_view_index(view)
+            group = (view_group + 1) % ngroups
             window.set_view_index(self.response_view, group, 0)
         window.focus_view(view)
 
