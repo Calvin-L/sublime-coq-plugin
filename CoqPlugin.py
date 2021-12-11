@@ -655,8 +655,9 @@ class CoqCommand(sublime_plugin.TextCommand):
             stop_worker(worker_key, worker, "worker has crashed")
             worker = None
 
+        settings = sublime.load_settings("CoqInteractive.sublime-settings")
+
         if not worker:
-            settings = sublime.load_settings("CoqInteractive.sublime-settings")
 
             view_style = settings.get("view_style", FALLBACK_DISPLAY_STYLE)
             if view_style not in DISPLAY_CLASSES_BY_NAME:
@@ -682,7 +683,6 @@ class CoqCommand(sublime_plugin.TextCommand):
             text = self.view.substr(sublime.Region(0, pos + 1))
             worker.seek(text=text, pos=pos)
 
-            settings = sublime.load_settings("CoqInteractive.sublime-settings")
             if settings.get("move_cursor_after_command", True):
                 # In inline mode, move after the phantom block
                 is_inline = isinstance(worker.display, DISPLAY_CLASSES_BY_NAME["inline"])
