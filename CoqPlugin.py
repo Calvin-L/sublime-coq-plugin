@@ -202,6 +202,13 @@ class CoqDisplay(object):
         """Subclasses must implement this."""
         raise NotImplementedError()
 
+    def owns_view(self, view):
+        """This method may only be called from the main thread.
+
+        Returns True iff the argument is a subordinate view owned by this
+        display (and therefore not a view into a normal Coq file)."""
+        raise NotImplementedError()
+
 class SplitPaneDisplay(CoqDisplay):
     def __init__(self, view):
         super().__init__(view)
