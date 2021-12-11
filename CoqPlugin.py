@@ -248,6 +248,9 @@ class SplitPaneDisplay(CoqDisplay):
             self.view.erase_regions("CoqTODO")
         self.response_view.run_command("coq_update_output_buffer", {"text": goal})
 
+    def owns_view(self, view):
+        return self.response_view.id() == view.id()
+
 class InlinePhantomDisplay(CoqDisplay):
     def __init__(self, view):
         super().__init__(view)
@@ -314,6 +317,9 @@ class InlinePhantomDisplay(CoqDisplay):
                 region=sublime.Region(goal_pos, goal_pos),
                 content=self.format_goal(goal),
                 layout=sublime.LAYOUT_BELOW)])
+
+    def owns_view(self, view):
+        return False
 
 # A "registry" of CoqDisplay subclasses for the "view_style" setting.  Each
 # constructor should take a single `view` argument (in addition to `self`).
@@ -623,8 +629,6 @@ def stop_worker(view_id, worker, reason):
 
 # --------------------------------------------------------- Sublime Commands
 
-coq_settings = dict()
-
 class CoqCommand(sublime_plugin.TextCommand):
     def run(self, edit):
         log.write(self.view.style_for_scope(DONE_SCOPE_NAME))
@@ -633,6 +637,10 @@ class CoqCommand(sublime_plugin.TextCommand):
         if "coq" not in self.view.scope_name(0):
             log.write("not inside a coq buffer")
             return
+        for worker in coq_threads.values():
+            if worker.display.owns_view(self.view):
+                log.write("inside a split view display")
+                return
         worker_key = self.view.id()
         worker = coq_threads.get(worker_key, None)
 
@@ -653,9 +661,6 @@ class CoqCommand(sublime_plugin.TextCommand):
                     + FALLBACK_DISPLAY_STYLE + " style.")
                 view_style = FALLBACK_DISPLAY_STYLE
 
-            global coq_settings
-            coq_settings = settings
-
             DisplayClass = DISPLAY_CLASSES_BY_NAME[view_style]
             worker = CoqWorker(
                 display         = DisplayClass(self.view),
@@ -670,7 +675,8 @@ class CoqCommand(sublime_plugin.TextCommand):
             text = self.view.substr(sublime.Region(0, pos + 1))
             worker.seek(text=text, pos=pos)
 
-            if coq_settings.get("move_cursor_after_command", True):
+            settings = sublime.load_settings("CoqInteractive.sublime-settings")
+            if settings.get("move_cursor_after_command", True):
                 # In inline mode, move after the phantom block
                 is_inline = isinstance(worker.display, DISPLAY_CLASSES_BY_NAME["inline"])
                 if is_inline and self.view.substr(pos) == "\n":
@@ -694,7 +700,8 @@ class CoqSeekNextCommand(CoqCommand):
     def seek_pos(self, worker):
         pos = worker.high_water_mark
         buffer = self.view.substr(sublime.Region(pos, self.view.size()))
-        return coq.find_first_coq_command(buffer) + pos
+        cmdpos = coq.find_first_coq_command(buffer)
+        return cmdpos + pos if cmdpos is not None else None
 
 class CoqSeekPrevCommand(CoqCommand):
     def seek_pos(self, worker):
