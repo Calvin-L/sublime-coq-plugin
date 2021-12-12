@@ -149,7 +149,7 @@ class CoqDisplay(object):
         bytes_spanned = 0
 
         while bytes_spanned < byte_length:
-            bytes_spanned += len(bytes(self.view.substr(position), 'utf-8'))
+            bytes_spanned += len(bytes(self.view.substr(position), coq.CHARSET))
             position += 1
 
         return position
