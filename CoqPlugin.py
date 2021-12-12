@@ -143,17 +143,6 @@ class CoqDisplay(object):
         with self._update():
             self.goal = (text + "\n\n" + goal).strip("\n")
 
-    def _byte_to_character_offset(self, byte_length, tip):
-        # Determine the character position which is byte_length bytes after tip
-        position = tip
-        bytes_spanned = 0
-
-        while bytes_spanned < byte_length:
-            bytes_spanned += len(bytes(self.view.substr(position), coq.CHARSET))
-            position += 1
-
-        return position
-
     def set_bad_ranges(self, bad_ranges):
         with self._update():
             self.bad_ranges = bad_ranges
@@ -693,11 +682,7 @@ class CoqWorker(threading.Thread):
         tip = self.high_water_mark
         goal = "Error: {}".format(error)
         if self.change_desired_high_water_mark(desired_high_water_mark, tip):
-            bad_ranges = [(self.display._byte_to_character_offset(start, tip),
-                           self.display._byte_to_character_offset(end, tip))
-                          for (start, end) in error.bad_ranges]
-
-            self.display.set_bad_ranges(bad_ranges)
+            self.display.set_bad_ranges([(start + tip, end + tip) for (start, end) in error.bad_ranges])
             self.display.show_goal(text=goal)
             self.display.set_marks(tip, tip)
         else:

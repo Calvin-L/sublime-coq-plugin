@@ -423,10 +423,13 @@ class CoqBot(object):
         if self.verbose:
             print(value)
 
-    def _append_and_check_response(self, xml_command):
+    def _append_and_check_response(self, xml_command, command_text):
         """Send the given XML string to Coq.
 
-        Returns (feedback_text, value_tag)
+        The command_text parameter is used to convert byte ranges in Coq's
+        output into character ranges.
+
+        Returns (feedback_text, value_tag) or throws CoqException.
         """
 
         value_tag = None
@@ -450,7 +453,9 @@ class CoqBot(object):
                     start = parsed.attrib.get("loc_s")
                     end = parsed.attrib.get("loc_e")
                     if start and end:
-                        bad_ranges.append((int(start), int(end)))
+                        start = util.byte_to_character_offset(command_text, int(start), charset=CHARSET)
+                        end = util.byte_to_character_offset(command_text, int(end), charset=CHARSET)
+                        bad_ranges.append((start, end))
 
                     raise CoqException(error, bad_ranges=bad_ranges)
 
@@ -511,7 +516,7 @@ class CoqBot(object):
             else:
                 to_send = '<call val="interp" id="0">{}</call>'.format(util.xml_encode(coq_cmd))
 
-            feedback_text, value_tag = self._append_and_check_response(to_send)
+            feedback_text, value_tag = self._append_and_check_response(to_send, coq_cmd)
             state_id = get_state_id(value_tag)
             original_state_id = self.state_id
             self.cmds_sent.append((coq_cmd, original_state_id, feedback_text))
@@ -519,7 +524,7 @@ class CoqBot(object):
 
             self.print("sending status query")
             try:
-                more_feedback_text, _ = self._append_and_check_response('<call val="Status"><bool val="{force}"/></call>'.format(force="true"))
+                more_feedback_text, _ = self._append_and_check_response('<call val="Status"><bool val="{force}"/></call>'.format(force="true"), coq_cmd)
             except CoqException:
                 # If coq accepts the Add command, then it has moved us to a new
                 # state id.  We really do have to tell it we want to go back to

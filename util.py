@@ -108,3 +108,24 @@ class XMLMuncher(object):
         self.parser.feed(buf)
         yield from self.handler.finished_tags
         self.handler.finished_tags.clear()
+
+
+def byte_to_character_offset(text, byte_offset, charset):
+    """Convert a byte offset to a character offset.
+
+    Generally, this function obeys the law:
+
+        text[:_byte_to_character_offset(text, byte_offset)] ==
+        text.encode(charset)[:byte_offset].decode(charset)
+
+    Note that if byte_offset falls in the middle of a character, this function
+    silently rounds up to the next character.
+    """
+    position = 0
+    bytes_spanned = 0
+
+    while bytes_spanned < byte_offset:
+        bytes_spanned += len(text[position].encode(charset))
+        position += 1
+
+    return position
