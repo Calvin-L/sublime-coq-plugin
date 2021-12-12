@@ -141,6 +141,17 @@ class CoqDisplay(object):
         with self._update():
             self.goal = goal
 
+    def _byte_to_character_offset(self, byte_length, tip):
+        # Determine the character position which is byte_length bytes after tip
+        position = tip
+        bytes_spanned = 0
+
+        while bytes_spanned < byte_length:
+            bytes_spanned += len(bytes(self.view.substr(position), 'utf-8'))
+            position += 1
+
+        return position
+
     def set_bad_ranges(self, bad_ranges):
         with self._update():
             self.bad_ranges = bad_ranges
@@ -238,6 +249,7 @@ class SplitPaneDisplay(CoqDisplay):
     def _cleanup(self):
         self.view.erase_regions("Coq")
         self.view.erase_regions("CoqTODO")
+        self.view.erase_regions("CoqError")
 
         # clean up the response view if it still exists
         response_view = self.response_view
@@ -253,6 +265,10 @@ class SplitPaneDisplay(CoqDisplay):
             self.view.add_regions("CoqTODO", [sublime.Region(high_water_mark, todo_mark)], scope=TODO_SCOPE_NAME, flags=TODO_FLAGS)
         else:
             self.view.erase_regions("CoqTODO")
+
+        bad_ranges = [sublime.Region(start, end) for (start, end) in bad_ranges]
+        self.view.add_regions("CoqError", bad_ranges, scope=ERROR_SCOPE_NAME, flags=ERROR_FLAGS)
+
         self.response_view.run_command("coq_update_output_buffer", {"text": goal})
 
     def owns_view(self, view):
@@ -612,7 +628,11 @@ class CoqWorker(threading.Thread):
         tip = self.high_water_mark
         goal = "Error: {}".format(error)
         if self.change_desired_high_water_mark(desired_high_water_mark, tip):
-            self.display.set_bad_ranges([(start + tip, end + tip) for (start, end) in error.bad_ranges])
+            bad_ranges = [(self.display._byte_to_character_offset(start, tip),
+                           self.display._byte_to_character_offset(end, tip))
+                          for (start, end) in error.bad_ranges]
+
+            self.display.set_bad_ranges(bad_ranges)
             self.display.show_goal(goal)
             self.display.set_marks(tip, tip)
         else:
@@ -750,6 +770,7 @@ class CoqViewEventListener(sublime_plugin.EventListener):
             # main thread changes that property via `seek`.
             text = view.substr(sublime.Region(0, worker.desired_high_water_mark + 1))
             worker.mark_dirty(text=text)
+            worker.display.set_bad_ranges([])
 
     def on_close(self, view):
         # NOTE 2021/11/29: There seems to be a bug in Sublime 4 (build 4121)
