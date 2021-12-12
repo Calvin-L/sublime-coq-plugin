@@ -17,5 +17,13 @@
     "view_style": "inline",
 
     // When sending commands to Coq, move the cursor to the end of the command.
-    "move_cursor_after_command": true
+    "move_cursor_after_command": true,
+
+    // Goals to show when display the current state:
+    //
+    //  - "primary": the absolute current goal, always only one
+    //
+    //  - "current": all currently-focused goals (like CoqIDE)
+    //
+    "show_goals": "current"
 }

@@ -23,6 +23,7 @@ import subprocess
 import shlex
 import codecs
 import threading
+import sublime
 
 from . import util
 
@@ -297,7 +298,9 @@ def format_response(xml, coq_version):
         forall r : record_name, In r rs &lt;-&gt; refers_to (EPlus e1 e2) r}</string></goal></list><list/></goals></option></value>
     """
 
+    settings = sublime.load_settings("CoqInteractive.sublime-settings")
     messages = []
+
     for x in xml:
         if x.tag == "feedback":
             for msg in x.iter("message"):
@@ -306,24 +309,77 @@ def format_response(xml, coq_version):
             if x.attrib.get("val") != "good":
                 state_id = get_state_id(x)
                 raise _CoqExceptionAtState(text_of(x), state_id)
-            goals = list(x.iter("goal"))
-            output = "Goals: {}\n\n".format(len(goals))
-            output += "\n".join(messages)
-            if goals:
-                # from xml import etree
-                # print("\n".join(ET.tostring(g).decode("UTF-8") for g in goals))
-                primary_goal = goals[0]
+
+            messages = "\n".join(messages)
+            summary = "Goals: "
+            output = ""
+
+            other_counts = []
+            current_goals = []
+            admitted_goals = []
+            primary_goal = None
+            finished = False
+
+            goal_lists = next(x.iter("goals"), None)
+            if goal_lists is None:
+                return messages
+
+            for i, node in enumerate(goal_lists.contents):
+                goals = list(node.iter("goal"))
+                count = len(goals)
+
+                # Current goals
+                if i == 0:
+                    summary += str(count)
+                    current_goals = goals
+                    if count > 0:
+                        primary_goal = goals[0]
+                # Background goals
+                elif i == 1 and count > 0:
+                    other_counts.append("{} background".format(count))
+                # Shelved goals (including evars)
+                elif i == 2 and count > 0:
+                    other_counts.append("{} shelved".format(count))
+                # Abandoned goals
+                elif i == 3 and count > 0:
+                    admitted_goals = goals
+                    other_counts.append("{} admitted".format(count))
+
+            if other_counts:
+               summary += " (" + ", ".join(other_counts) + ")"
+            summary += "\n\n"
+
+            if settings.get("show_goals", "current") == "primary":
+                goals_to_show = [primary_goal] if primary_goal else []
+            else:
+                goals_to_show = current_goals
+
+            if goals_to_show == []:
+                finished = True
+                goals_to_show = admitted_goals
+
+            for i, goal in enumerate(goals_to_show):
                 if coq_version >= (8,6):
-                    strs = list(primary_goal.iter("richpp"))
+                    strs = list(goal.iter("richpp"))
                 else:
-                    strs = list(primary_goal.iter("string"))[1:]
-                hyps = strs[:-1]
-                goal = strs[-1]
-                for h in hyps:
-                    output += "  {}\n".format(text_of(h))
-                output += "  " + ("-" * 40) + "\n"
+                    strs = list(goal.iter("string"))[1:]
+                # First a list of hypotheses, then the goal
+                goals_to_show[i] = (strs[:-1], strs[-1])
+
+            if finished:
+                if goals_to_show == []:
+                    return messages + "No more goals."
+                else:
+                    goals = "\n\n".join(text_of(goal) for hyps, goal in admitted_goals)
+                    return messages + "No more goals, but there are some goals you gave up:\n\n" + goals
+
+            for i, (hyps, goal) in enumerate(goals_to_show):
+                if i == 0:
+                    output += "".join("  {}\n".format(text_of(h)) for h in hyps)
+                output += "  " + ("─" * 40) + " ({}/{})\n".format(i+1, len(goals_to_show))
                 output += "  {}\n".format(text_of(goal))
-            return output
+
+            return messages + summary + output
         # else:
         #     print("got tag '{}'".format(x))
 
