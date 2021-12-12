@@ -528,7 +528,7 @@ class CoqWorker(threading.Thread):
                 if need_check_for_modifications:
                     self._check_for_modifications(text)
                 elif do_step:
-                    self.step(*do_step)
+                    self.step(text, *do_step)
             except coq.StoppedException:
                 log.write("Worker is aborting due to StoppedException")
                 assert self.state in ("STOPPING", "DEAD")
@@ -611,7 +611,7 @@ class CoqWorker(threading.Thread):
                 # Regardless of what the user wants, we need to rewind back to
                 # the now-unproven position.
                 while self.high_water_mark > index:
-                    self.step(from_idx=self.high_water_mark, to_idx=index)
+                    self.step(text, from_idx=self.high_water_mark, to_idx=index)
 
                 return
 
@@ -642,15 +642,15 @@ class CoqWorker(threading.Thread):
                 log.write("Releasing monitor [FAILED]")
                 return False
 
-    def step(self, from_idx, to_idx):
+    def step(self, text, from_idx, to_idx):
         log.write("step called: {} --> {}".format(from_idx, to_idx))
 
         self.display.set_bad_ranges([])
 
         if from_idx < to_idx:
-            log.write("unsent: {!r}".format(self.text[from_idx:to_idx]))
+            log.write("unsent: {!r}".format(text[from_idx:to_idx]))
             try:
-                cmd_end = self.coq.append(self.text, start=from_idx, end=to_idx, verbose=True)
+                cmd_end = self.coq.append(text, start=from_idx, end=to_idx, verbose=True)
             except coq.CoqException as e:
                 log.write("send was rejected ({})".format(e))
                 self._stop_and_show_error(to_idx, e)
