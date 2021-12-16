@@ -286,102 +286,60 @@ def get_state_id(xml):
     return int(find_child(xml, "state_id").attrib.get("val"))
 
 
-def format_response(xml, coq_version):
-    """Takes XML output from coqtop and makes it clean and pretty.
-
-    Sample input:
-        <value val="good"><option val="some"><goals><list><goal><string>14</string><list><string>n : nat</string></list><string>{rs : list record_name |
-        forall r : record_name, In r rs &lt;-&gt; refers_to (EConst n) r}</string></goal><goal><string>15</string><list><string>r : record_name</string></list><string>{rs : list record_name |
-        forall r0 : record_name, In r0 rs &lt;-&gt; refers_to (EVar r) r0}</string></goal><goal><string>20</string><list><string>e1 : expr</string><string>e2 : expr</string><string>IHe1 : {rs : list record_name |
-        forall r : record_name, In r rs &lt;-&gt; refers_to e1 r}</string><string>IHe2 : {rs : list record_name |
-        forall r : record_name, In r rs &lt;-&gt; refers_to e2 r}</string></list><string>{rs : list record_name |
-        forall r : record_name, In r rs &lt;-&gt; refers_to (EPlus e1 e2) r}</string></goal></list><list/></goals></option></value>
-    """
+def format_response(rp):
+    """Format a CoqGoalResponse into a readable form."""
 
     settings = sublime.load_settings("CoqInteractive.sublime-settings")
-    messages = []
+    feedback = "\n".join(rp.feedback())
 
-    for x in xml:
-        if x.tag == "feedback":
-            for msg in x.iter("message"):
-                messages.append(text_of(msg))
-        if x.tag == "value":
-            if x.attrib.get("val") != "good":
-                state_id = get_state_id(x)
-                raise _CoqExceptionAtState(text_of(x), state_id)
+    other_counts = []
+    primary_goal = None
+    output = ""
 
-            messages = "\n".join(messages)
-            summary = "Goals: "
-            output = ""
+    focused_goals = rp.goals("focused")
+    finished = (len(focused_goals) == 0)
+    summary = "Goals: {}".format(len(focused_goals))
+    if focused_goals:
+        primary_goal = focused_goals[0]
 
-            other_counts = []
-            current_goals = []
-            admitted_goals = []
-            primary_goal = None
-            finished = False
+    bg_goals = rp.goals("bg-before") + rp.goals("bg-after")
+    if bg_goals:
+        other_counts.append("{} background".format(len(bg_goals)))
 
-            goal_lists = next(x.iter("goals"), None)
-            if goal_lists is None:
-                return messages
+    shelved_goals = rp.goals("shelved")
+    if shelved_goals:
+        other_counts.append("{} background".format(len(shelved_goals)))
 
-            for i, node in enumerate(goal_lists.contents):
-                goals = list(node.iter("goal"))
-                count = len(goals)
+    admitted_goals = rp.goals("admitted")
+    if admitted_goals:
+        other_counts.append("{} admitted".format(len(admitted_goals)))
 
-                # Current goals
-                if i == 0:
-                    summary += str(count)
-                    current_goals = goals
-                    if count > 0:
-                        primary_goal = goals[0]
-                # Background goals
-                elif i == 1 and count > 0:
-                    other_counts.append("{} background".format(count))
-                # Shelved goals (including evars)
-                elif i == 2 and count > 0:
-                    other_counts.append("{} shelved".format(count))
-                # Abandoned goals
-                elif i == 3 and count > 0:
-                    admitted_goals = goals
-                    other_counts.append("{} admitted".format(count))
+    if other_counts:
+       summary += " (" + ", ".join(other_counts) + ")"
+    summary += "\n\n"
 
-            if other_counts:
-               summary += " (" + ", ".join(other_counts) + ")"
-            summary += "\n\n"
+    if finished:
+        if bg_goals:
+            goals = "\n\n".join(text_of(goal) for hyps, goal in bg_goals)
+            return feedback + "This subproof is complete, but there are some unfocused goals:\n\n" + goals
+        elif admitted_goals:
+            goals = "\n\n".join(text_of(goal) for hyps, goal in admitted_goals)
+            return feedback + "No more goals, but there are some goals you gave up:\n\n" + goals
+        else:
+            return feedback + "No more goals."
 
-            if settings.get("show_goals", "current") == "primary":
-                goals_to_show = [primary_goal] if primary_goal else []
-            else:
-                goals_to_show = current_goals
+    if settings.get("show_goals", "current") == "primary":
+        goals_to_show = [primary_goal] if primary_goal else []
+    else:
+        goals_to_show = focused_goals
 
-            if goals_to_show == []:
-                finished = True
-                goals_to_show = admitted_goals
+    for i, (hyps, goal) in enumerate(goals_to_show):
+        if i == 0:
+            output += "".join("  {}\n".format(text_of(h)) for h in hyps)
+        output += "  " + ("─" * 40) + " ({}/{})\n".format(i+1, len(goals_to_show))
+        output += "  {}\n".format(text_of(goal))
 
-            for i, goal in enumerate(goals_to_show):
-                if coq_version >= (8,6):
-                    strs = list(goal.iter("richpp"))
-                else:
-                    strs = list(goal.iter("string"))[1:]
-                # First a list of hypotheses, then the goal
-                goals_to_show[i] = (strs[:-1], strs[-1])
-
-            if finished:
-                if goals_to_show == []:
-                    return messages + "No more goals."
-                else:
-                    goals = "\n\n".join(text_of(goal) for hyps, goal in admitted_goals)
-                    return messages + "No more goals, but there are some goals you gave up:\n\n" + goals
-
-            for i, (hyps, goal) in enumerate(goals_to_show):
-                if i == 0:
-                    output += "".join("  {}\n".format(text_of(h)) for h in hyps)
-                output += "  " + ("─" * 40) + " ({}/{})\n".format(i+1, len(goals_to_show))
-                output += "  {}\n".format(text_of(goal))
-
-            return messages + summary + output
-        # else:
-        #     print("got tag '{}'".format(x))
+    return feedback + summary + output
 
 
 class CoqException(Exception):
@@ -394,6 +352,80 @@ class _CoqExceptionAtState(CoqException):
     def __init__(self, message, state_id):
         super().__init__(message)
         self.state_id = state_id
+
+
+class CoqGoalResponse(object):
+    """A response to Coqtop's Goal command.
+
+    This class wraps the following information of the response:
+      - feedback() returns a list of feedback messages
+      - goals() returns a list of goals from one or all categories
+        ("focused", "bg-before", "bg-after", "shelved", or "admitted")
+      - goal_count() returns the amount of focused goals (usually the visible
+        ones)
+
+    Each goal is represented by a pair (hyps, goal) where [hyps] is list of
+    strings like "H: P x" and [goal] is a string like "P y".
+    """
+
+    def __init__(self, xml, coq_version):
+        self.messages = []
+        self._goals = {
+            "focused": [],
+            "bg-before": [],
+            "bg-after": [],
+            "shelved": [],
+            "admitted": [],
+        }
+
+        for x in xml:
+            if x.tag == "feedback":
+                for msg in x.iter("message"):
+                    self.messages.append(text_of(msg))
+
+            if x.tag == "value":
+                if x.attrib.get("val") != "good":
+                    state_id = get_state_id(x)
+                    raise _CoqExceptionAtState(text_of(x), state_id)
+
+                goal_lists = next(x.iter("goals"), None)
+                if goal_lists is None:
+                    continue
+
+                for i, node in enumerate(goal_lists.contents):
+                    if i == 0:
+                        self._goals["focused"] += list(node.iter("goal"))
+                    elif i == 1:
+                        pair = next(node.iter("pair"), None)
+                        if pair is not None:
+                            before, after = pair.contents
+                            self._goals["bg-before"] += list(before.iter("goal"))
+                            self._goals["bg-after"] += list(after.iter("goal"))
+                    elif i == 2:
+                        self._goals["shelved"] += list(node.iter("goal"))
+                    elif i == 3:
+                        self._goals["admitted"] += list(node.iter("goal"))
+
+        # Separate context (hypotheses) and goal
+        for goals in self._goals.values():
+            for i, tag in enumerate(goals):
+                if coq_version >= (8,6):
+                    strs = list(tag.iter("richpp"))
+                else:
+                    strs = list(tag.iter("string"))[1:]
+                goals[i] = (strs[:-1], strs[-1])
+
+    def feedback(self):
+        return self.messages[:]
+
+    def goals(self, category):
+        if category not in self._goals:
+            raise ValueError("invalid goal category '{}'".format(category))
+
+        return self._goals[category][:]
+
+    def goal_count(self):
+        return len(self.goals["current"])
 
 
 class CoqBot(object):
@@ -552,10 +584,11 @@ class CoqBot(object):
             response = self.coqtop.send('<call val="Goal"><unit/></call>')
         else:
             response = self.coqtop.send('<call val="goal"></call>')
+        response = CoqGoalResponse(response, self.coq_version)
         feedback_text = self.cmds_sent[-1][2] if self.cmds_sent else ""
         if feedback_text:
             feedback_text = feedback_text + "\n\n"
-        return feedback_text + format_response(response, coq_version=self.coq_version)
+        return feedback_text + format_response(response)
 
     def _rewind_to(self, index_of_earliest_undone_command):
         if index_of_earliest_undone_command == len(self.cmds_sent):
