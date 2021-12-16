@@ -328,7 +328,7 @@ def format_response(rp):
         else:
             return feedback + "No more goals."
 
-    if settings.get("show_goals", "current") == "primary":
+    if settings.get("show_goals", "focused") == "primary":
         goals_to_show = [primary_goal] if primary_goal else []
     else:
         goals_to_show = focused_goals

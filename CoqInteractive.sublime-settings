@@ -23,7 +23,7 @@
     //
     //  - "primary": the absolute current goal, always only one
     //
-    //  - "current": all currently-focused goals (like CoqIDE)
+    //  - "focused": all currently-focused goals (like CoqIDE)
     //
-    "show_goals": "current"
+    "show_goals": "focused"
 }
