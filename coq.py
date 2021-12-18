@@ -23,6 +23,7 @@ import subprocess
 import shlex
 import codecs
 import threading
+import traceback
 
 from . import util
 
