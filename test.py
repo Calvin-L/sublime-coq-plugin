@@ -154,7 +154,7 @@ def test1(path, version):
 
 TESTS = [
     """
-    Require Import Omega.
+    Require Import Lia.
     Require Import List.
     Import ListNotations.
 
@@ -181,7 +181,7 @@ TESTS = [
       unfold nats.
       intro x.
       simpl.
-      intuition omega.
+      intuition lia.
     Qed.
     """
 ]
