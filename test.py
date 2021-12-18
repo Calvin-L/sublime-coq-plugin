@@ -70,6 +70,8 @@ def path_to_coqtop(version):
     return last.decode("ascii").strip()
 
 COQ_VERSIONS = [
+    (8,14),
+    (8,13),
     (8,12),
     (8,11),
     (8,10),
