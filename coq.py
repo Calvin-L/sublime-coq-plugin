@@ -23,7 +23,6 @@ import subprocess
 import shlex
 import codecs
 import threading
-import sublime
 
 from . import util
 
@@ -286,62 +285,6 @@ def get_state_id(xml):
     return int(find_child(xml, "state_id").attrib.get("val"))
 
 
-def format_response(rp):
-    """Format a CoqGoalResponse into a readable form."""
-
-    settings = sublime.load_settings("CoqInteractive.sublime-settings")
-    feedback = "\n".join(rp.feedback())
-
-    other_counts = []
-    primary_goal = None
-    output = ""
-
-    focused_goals = rp.goals("focused")
-    finished = (len(focused_goals) == 0)
-    summary = "Goals: {}".format(len(focused_goals))
-    if focused_goals:
-        primary_goal = focused_goals[0]
-
-    bg_goals = rp.goals("bg-before") + rp.goals("bg-after")
-    if bg_goals:
-        other_counts.append("{} background".format(len(bg_goals)))
-
-    shelved_goals = rp.goals("shelved")
-    if shelved_goals:
-        other_counts.append("{} background".format(len(shelved_goals)))
-
-    admitted_goals = rp.goals("admitted")
-    if admitted_goals:
-        other_counts.append("{} admitted".format(len(admitted_goals)))
-
-    if other_counts:
-       summary += " (" + ", ".join(other_counts) + ")"
-    summary += "\n\n"
-
-    if finished:
-        if bg_goals:
-            goals = "\n\n".join(text_of(goal) for hyps, goal in bg_goals)
-            return feedback + "This subproof is complete, but there are some unfocused goals:\n\n" + goals
-        elif admitted_goals:
-            goals = "\n\n".join(text_of(goal) for hyps, goal in admitted_goals)
-            return feedback + "No more goals, but there are some goals you gave up:\n\n" + goals
-        else:
-            return feedback + "No more goals."
-
-    if settings.get("show_goals", "focused") == "primary":
-        goals_to_show = [primary_goal] if primary_goal else []
-    else:
-        goals_to_show = focused_goals
-
-    for i, (hyps, goal) in enumerate(goals_to_show):
-        if i == 0:
-            output += "".join("  {}\n".format(text_of(h)) for h in hyps)
-        output += "  " + ("─" * 40) + " ({}/{})\n".format(i+1, len(goals_to_show))
-        output += "  {}\n".format(text_of(goal))
-
-    return feedback + summary + output
-
-
 class CoqException(Exception):
     def __init__(self, message, bad_ranges=()):
         super().__init__(message)
@@ -372,11 +315,11 @@ class CoqGoalResponse(object):
         self.messages = []
         self._goals = {
             "focused": [],
-            "bg-before": [],
-            "bg-after": [],
             "shelved": [],
             "admitted": [],
         }
+        self._bg_goals = []
+        self.in_proof = False
 
         for x in xml:
             if x.tag == "feedback":
@@ -392,15 +335,17 @@ class CoqGoalResponse(object):
                 if goal_lists is None:
                     continue
 
+                self.in_proof = True
+
                 for i, node in enumerate(goal_lists.contents):
                     if i == 0:
                         self._goals["focused"] += list(node.iter("goal"))
                     elif i == 1:
-                        pair = next(node.iter("pair"), None)
-                        if pair is not None:
+                        for pair in node.iter("pair"):
                             before, after = pair.contents
-                            self._goals["bg-before"] += list(before.iter("goal"))
-                            self._goals["bg-after"] += list(after.iter("goal"))
+                            before = list(before.iter("goal"))
+                            after = list(after.iter("goal"))
+                            self._bg_goals.append((before, after))
                     elif i == 2:
                         self._goals["shelved"] += list(node.iter("goal"))
                     elif i == 3:
@@ -409,20 +354,35 @@ class CoqGoalResponse(object):
         # Separate context (hypotheses) and goal
         for goals in self._goals.values():
             for i, tag in enumerate(goals):
-                if coq_version >= (8,6):
-                    strs = list(tag.iter("richpp"))
-                else:
-                    strs = list(tag.iter("string"))[1:]
-                goals[i] = (strs[:-1], strs[-1])
+                goals[i] = self._split_goal(tag, coq_version)
+        for before, after in self._bg_goals:
+            for i, tag in enumerate(before):
+                before[i] = self._split_goal(tag, coq_version)
+            for i, tag in enumerate(after):
+                after[i] = self._split_goal(tag, coq_version)
+
+    def _split_goal(self, goal_tag, coq_version):
+        """Separate context (hypotheses) and goal from a goal tag."""
+        if coq_version >= (8,6):
+            strs = list(goal_tag.iter("richpp"))
+        else:
+            strs = list(goal_tag.iter("string"))[1:]
+        return (strs[:-1], strs[-1])
 
     def feedback(self):
         return self.messages[:]
+
+    def is_in_proof(self):
+        return self.in_proof
 
     def goals(self, category):
         if category not in self._goals:
             raise ValueError("invalid goal category '{}'".format(category))
 
         return self._goals[category][:]
+
+    def bg_goals(self):
+        return self._bg_goals
 
     def goal_count(self):
         return len(self.goals["current"])
@@ -497,7 +457,7 @@ class CoqBot(object):
         assert value_tag is not None
         return (feedback_text.strip(), value_tag)
 
-    def append(self, text, start=0, end=None):
+    def append(self, text, start=0, end=None, verbose=False):
         """Send the first command in `text[start:end]` to Coq.
 
         Returns the new offset after processing the first command in
@@ -542,9 +502,10 @@ class CoqBot(object):
             coq_cmd = text[start:index_of_end_of_command]
 
             if self.coq_version >= (8,7):
-                to_send = '<call val="Add"><pair><pair><string>{cmd}</string><int>1</int></pair><pair><state_id val="{state_id}"/><bool val="false"/></pair></pair></call>'.format(
+                to_send = '<call val="Add"><pair><pair><string>{cmd}</string><int>1</int></pair><pair><state_id val="{state_id}"/><bool val="{verbose}"/></pair></pair></call>'.format(
                     cmd=util.xml_encode(coq_cmd),
-                    state_id=self.state_id)
+                    state_id=self.state_id,
+                    verbose="true" if verbose else "false")
             elif self.coq_version >= (8,5):
                 to_send = '<call val="Interp"><pair><pair><bool val="false"/><bool val="false"/></pair><string>{}</string></pair></call>'.format(util.xml_encode(coq_cmd))
             else:
@@ -586,9 +547,7 @@ class CoqBot(object):
             response = self.coqtop.send('<call val="goal"></call>')
         response = CoqGoalResponse(response, self.coq_version)
         feedback_text = self.cmds_sent[-1][2] if self.cmds_sent else ""
-        if feedback_text:
-            feedback_text = feedback_text + "\n\n"
-        return feedback_text + format_response(response)
+        return feedback_text, response
 
     def _rewind_to(self, index_of_earliest_undone_command):
         if index_of_earliest_undone_command == len(self.cmds_sent):

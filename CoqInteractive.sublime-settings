@@ -19,7 +19,7 @@
     // When sending commands to Coq, move the cursor to the end of the command.
     "move_cursor_after_command": true,
 
-    // Goals to show when display the current state:
+    // Goals to show when displaying the current state:
     //
     //  - "primary": the absolute current goal, always only one
     //
