@@ -46,29 +46,34 @@ class CoqtopProc(object):
     def __init__(self, coq_install_dir, coq_version, extra_args=(), working_dir=None, verbose=False):
         """
         Spawns a new coqtop process and creates pipes for interaction.
+
+        This constructor tries several ways to start Coq from
+        <coq_install_dir>/bin:
+
+            - coqidetop.opt -main-channel stdfds               (Coq 8.9+)
+            - coqidetop     -main-channel stdfds               (Coq 8.9+)
+            - coqtop        -main-channel stdfds -ideslave     (Coq 8.5 to 8.8)
+            - coqtop        -ideslave                          (Coq 8.4)
         """
         self.stop_lock = threading.Lock()
         self.alive = True
 
         possible_cmds = []
 
-        if coq_version >= (8,9):
+        if coq_version >= (8,5):
             possible_cmds.append([
                 os.path.join(coq_install_dir, "bin", "coqidetop.opt"),
                 "-main-channel", "stdfds"])
             possible_cmds.append([
                 os.path.join(coq_install_dir, "bin", "coqidetop"),
                 "-main-channel", "stdfds"])
-        elif coq_version >= (8,5):
             possible_cmds.append([
                 os.path.join(coq_install_dir, "bin", "coqtop"),
                 "-main-channel", "stdfds", "-ideslave"])
-        elif coq_version >= (8,4):
+        else:
             possible_cmds.append([
                 os.path.join(coq_install_dir, "bin", "coqtop"),
                 "-ideslave"])
-        else:
-            raise Exception("specified version of coqtop is too old!")
 
         extra_args = list(extra_args)
         if working_dir is not None:
