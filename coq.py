@@ -512,13 +512,11 @@ class CoqBot(object):
         if index_of_end_of_command:
             coq_cmd = text[start:index_of_end_of_command]
 
-            if self.coq_version >= (8,7):
+            if self.coq_version >= (8,5):
                 to_send = '<call val="Add"><pair><pair><string>{cmd}</string><int>1</int></pair><pair><state_id val="{state_id}"/><bool val="{verbose}"/></pair></pair></call>'.format(
                     cmd=util.xml_encode(coq_cmd),
                     state_id=self.state_id,
                     verbose="true" if verbose else "false")
-            elif self.coq_version >= (8,5):
-                to_send = '<call val="Interp"><pair><pair><bool val="false"/><bool val="false"/></pair><string>{}</string></pair></call>'.format(util.xml_encode(coq_cmd))
             else:
                 to_send = '<call val="interp" id="0">{}</call>'.format(util.xml_encode(coq_cmd))
 
