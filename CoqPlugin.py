@@ -137,9 +137,11 @@ class CoqDisplay(object):
             self.high_water_mark = high_water_mark
             self.todo_mark = todo_mark
 
-    def show_goal(self, goal):
+    def show_goal(self, text="", goal=None):
+        goal = format_goal_response(goal) if goal else ""
+
         with self._update():
-            self.goal = goal
+            self.goal = (text + "\n\n" + goal).strip("\n")
 
     def _byte_to_character_offset(self, byte_length, tip):
         # Determine the character position which is byte_length bytes after tip
@@ -351,6 +353,69 @@ DISPLAY_CLASSES_BY_NAME = {
     "inline": InlinePhantomDisplay,
 }
 
+# --------------------------------------------------------- Display formatting
+
+def format_goal_response(rp):
+    """Format a CoqGoalResponse into a readable form."""
+
+    settings = sublime.load_settings("CoqInteractive.sublime-settings")
+    feedback = "\n".join(rp.feedback())
+
+    if not rp.is_in_proof():
+        return feedback
+
+    other_counts = []
+    primary_goal = None
+    output = ""
+
+    focused_goals = rp.goals("focused")
+    finished = (len(focused_goals) == 0)
+    summary = "Goals: {}".format(len(focused_goals))
+    if focused_goals:
+        primary_goal = focused_goals[0]
+
+    # Flatten the background goal stack
+    bg_goals = []
+    for before, after in rp.bg_goals():
+        bg_goals += before + after
+    if bg_goals:
+        other_counts.append("{} background".format(len(bg_goals)))
+
+    shelved_goals = rp.goals("shelved")
+    if shelved_goals:
+        other_counts.append("{} background".format(len(shelved_goals)))
+
+    admitted_goals = rp.goals("admitted")
+    if admitted_goals:
+        other_counts.append("{} admitted".format(len(admitted_goals)))
+
+    if other_counts:
+       summary += " (" + ", ".join(other_counts) + ")"
+    summary += "\n\n"
+
+    if finished:
+        if bg_goals:
+            goals = "\n\n".join(coq.text_of(goal) for hyps, goal in bg_goals)
+            return feedback + "This subproof is complete, but there are some unfocused goals:\n\n" + goals
+        elif admitted_goals:
+            goals = "\n\n".join(coq.text_of(goal) for hyps, goal in admitted_goals)
+            return feedback + "No more goals, but there are some goals you gave up:\n\n" + goals
+        else:
+            return feedback + "No more goals."
+
+    if settings.get("show_goals", "focused") == "primary":
+        goals_to_show = [primary_goal] if primary_goal else []
+    else:
+        goals_to_show = focused_goals
+
+    for i, (hyps, goal) in enumerate(goals_to_show):
+        if i == 0:
+            output += "".join("  {}\n".format(coq.text_of(h)) for h in hyps)
+        output += "  " + ("─" * 40) + " ({}/{})\n".format(i+1, len(goals_to_show))
+        output += "  {}\n".format(coq.text_of(goal))
+
+    return feedback + summary + output
+
 # --------------------------------------------------------- Logging
 
 class Log(object):
@@ -480,7 +545,7 @@ class CoqWorker(threading.Thread):
                 if text is not None:
                     self.text = text
                 self.desired_high_water_mark = pos
-                self.display.show_goal("Working...")
+                self.display.show_goal(text="Working...")
                 self.display.set_marks(min(pos, self.high_water_mark), pos)
                 log.write("Notifying all [seek]")
                 self.monitor.notify_all()
@@ -492,7 +557,7 @@ class CoqWorker(threading.Thread):
             log.write("Acquired monitor! [step]")
             if self.state == "ALIVE":
                 self.state = "STOPPING"
-                self.display.show_goal("Stopping...")
+                self.display.show_goal(text="Stopping...")
                 log.write("Notifying all [stop]")
                 self.monitor.notify_all()
             log.write("Releasing monitor [stop]")
@@ -585,7 +650,7 @@ class CoqWorker(threading.Thread):
         if from_idx < to_idx:
             log.write("unsent: {!r}".format(self.text[from_idx:to_idx]))
             try:
-                cmd_end = self.coq.append(self.text, start=from_idx, end=to_idx)
+                cmd_end = self.coq.append(self.text, start=from_idx, end=to_idx, verbose=True)
             except coq.CoqException as e:
                 log.write("send was rejected ({})".format(e))
                 self._stop_and_show_error(to_idx, e)
@@ -616,12 +681,12 @@ class CoqWorker(threading.Thread):
         log.write("checking goal [target={}]".format(desired_high_water_mark))
 
         try:
-            goal = self.coq.current_goal()
+            feedback_text, goal = self.coq.current_goal()
         except coq.CoqException as e:
             self._stop_and_show_error(desired_high_water_mark, e)
             return
 
-        self.display.show_goal(goal)
+        self.display.show_goal(text=feedback_text, goal=goal)
         self.display.set_marks(self.high_water_mark, desired_high_water_mark)
 
     def _stop_and_show_error(self, desired_high_water_mark, error):
@@ -633,7 +698,7 @@ class CoqWorker(threading.Thread):
                           for (start, end) in error.bad_ranges]
 
             self.display.set_bad_ranges(bad_ranges)
-            self.display.show_goal(goal)
+            self.display.show_goal(text=goal)
             self.display.set_marks(tip, tip)
         else:
             print("WARNING: mark update {}-->{} failed".format(desired_high_water_mark, tip))

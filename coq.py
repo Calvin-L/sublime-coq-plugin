@@ -285,49 +285,6 @@ def get_state_id(xml):
     return int(find_child(xml, "state_id").attrib.get("val"))
 
 
-def format_response(xml, coq_version):
-    """Takes XML output from coqtop and makes it clean and pretty.
-
-    Sample input:
-        <value val="good"><option val="some"><goals><list><goal><string>14</string><list><string>n : nat</string></list><string>{rs : list record_name |
-        forall r : record_name, In r rs &lt;-&gt; refers_to (EConst n) r}</string></goal><goal><string>15</string><list><string>r : record_name</string></list><string>{rs : list record_name |
-        forall r0 : record_name, In r0 rs &lt;-&gt; refers_to (EVar r) r0}</string></goal><goal><string>20</string><list><string>e1 : expr</string><string>e2 : expr</string><string>IHe1 : {rs : list record_name |
-        forall r : record_name, In r rs &lt;-&gt; refers_to e1 r}</string><string>IHe2 : {rs : list record_name |
-        forall r : record_name, In r rs &lt;-&gt; refers_to e2 r}</string></list><string>{rs : list record_name |
-        forall r : record_name, In r rs &lt;-&gt; refers_to (EPlus e1 e2) r}</string></goal></list><list/></goals></option></value>
-    """
-
-    messages = []
-    for x in xml:
-        if x.tag == "feedback":
-            for msg in x.iter("message"):
-                messages.append(text_of(msg))
-        if x.tag == "value":
-            if x.attrib.get("val") != "good":
-                state_id = get_state_id(x)
-                raise _CoqExceptionAtState(text_of(x), state_id)
-            goals = list(x.iter("goal"))
-            output = "Goals: {}\n\n".format(len(goals))
-            output += "\n".join(messages)
-            if goals:
-                # from xml import etree
-                # print("\n".join(ET.tostring(g).decode("UTF-8") for g in goals))
-                primary_goal = goals[0]
-                if coq_version >= (8,6):
-                    strs = list(primary_goal.iter("richpp"))
-                else:
-                    strs = list(primary_goal.iter("string"))[1:]
-                hyps = strs[:-1]
-                goal = strs[-1]
-                for h in hyps:
-                    output += "  {}\n".format(text_of(h))
-                output += "  " + ("-" * 40) + "\n"
-                output += "  {}\n".format(text_of(goal))
-            return output
-        # else:
-        #     print("got tag '{}'".format(x))
-
-
 class CoqException(Exception):
     def __init__(self, message, bad_ranges=()):
         super().__init__(message)
@@ -338,6 +295,97 @@ class _CoqExceptionAtState(CoqException):
     def __init__(self, message, state_id):
         super().__init__(message)
         self.state_id = state_id
+
+
+class CoqGoalResponse(object):
+    """A response to Coqtop's Goal command.
+
+    This class wraps the following information of the response:
+      - feedback() returns a list of feedback messages
+      - goals() returns a list of goals from one or all categories
+        ("focused", "bg-before", "bg-after", "shelved", or "admitted")
+      - goal_count() returns the amount of focused goals (usually the visible
+        ones)
+
+    Each goal is represented by a pair (hyps, goal) where [hyps] is list of
+    strings like "H: P x" and [goal] is a string like "P y".
+    """
+
+    def __init__(self, xml, coq_version):
+        self.messages = []
+        self._goals = {
+            "focused": [],
+            "shelved": [],
+            "admitted": [],
+        }
+        self._bg_goals = []
+        self.in_proof = False
+
+        for x in xml:
+            if x.tag == "feedback":
+                for msg in x.iter("message"):
+                    self.messages.append(text_of(msg))
+
+            if x.tag == "value":
+                if x.attrib.get("val") != "good":
+                    state_id = get_state_id(x)
+                    raise _CoqExceptionAtState(text_of(x), state_id)
+
+                goal_lists = next(x.iter("goals"), None)
+                if goal_lists is None:
+                    continue
+
+                self.in_proof = True
+
+                for i, node in enumerate(goal_lists.contents):
+                    if i == 0:
+                        self._goals["focused"] += list(node.iter("goal"))
+                    elif i == 1:
+                        for pair in node.iter("pair"):
+                            before, after = pair.contents
+                            before = list(before.iter("goal"))
+                            after = list(after.iter("goal"))
+                            self._bg_goals.append((before, after))
+                    elif i == 2:
+                        self._goals["shelved"] += list(node.iter("goal"))
+                    elif i == 3:
+                        self._goals["admitted"] += list(node.iter("goal"))
+
+        # Separate context (hypotheses) and goal
+        for goals in self._goals.values():
+            for i, tag in enumerate(goals):
+                goals[i] = self._split_goal(tag, coq_version)
+        for before, after in self._bg_goals:
+            for i, tag in enumerate(before):
+                before[i] = self._split_goal(tag, coq_version)
+            for i, tag in enumerate(after):
+                after[i] = self._split_goal(tag, coq_version)
+
+    def _split_goal(self, goal_tag, coq_version):
+        """Separate context (hypotheses) and goal from a goal tag."""
+        if coq_version >= (8,6):
+            strs = list(goal_tag.iter("richpp"))
+        else:
+            strs = list(goal_tag.iter("string"))[1:]
+        return (strs[:-1], strs[-1])
+
+    def feedback(self):
+        return self.messages[:]
+
+    def is_in_proof(self):
+        return self.in_proof
+
+    def goals(self, category):
+        if category not in self._goals:
+            raise ValueError("invalid goal category '{}'".format(category))
+
+        return self._goals[category][:]
+
+    def bg_goals(self):
+        return self._bg_goals
+
+    def goal_count(self):
+        return len(self.goals["current"])
 
 
 class CoqBot(object):
@@ -409,7 +457,7 @@ class CoqBot(object):
         assert value_tag is not None
         return (feedback_text.strip(), value_tag)
 
-    def append(self, text, start=0, end=None):
+    def append(self, text, start=0, end=None, verbose=False):
         """Send the first command in `text[start:end]` to Coq.
 
         Returns the new offset after processing the first command in
@@ -454,9 +502,10 @@ class CoqBot(object):
             coq_cmd = text[start:index_of_end_of_command]
 
             if self.coq_version >= (8,7):
-                to_send = '<call val="Add"><pair><pair><string>{cmd}</string><int>1</int></pair><pair><state_id val="{state_id}"/><bool val="false"/></pair></pair></call>'.format(
+                to_send = '<call val="Add"><pair><pair><string>{cmd}</string><int>1</int></pair><pair><state_id val="{state_id}"/><bool val="{verbose}"/></pair></pair></call>'.format(
                     cmd=util.xml_encode(coq_cmd),
-                    state_id=self.state_id)
+                    state_id=self.state_id,
+                    verbose="true" if verbose else "false")
             elif self.coq_version >= (8,5):
                 to_send = '<call val="Interp"><pair><pair><bool val="false"/><bool val="false"/></pair><string>{}</string></pair></call>'.format(util.xml_encode(coq_cmd))
             else:
@@ -496,10 +545,9 @@ class CoqBot(object):
             response = self.coqtop.send('<call val="Goal"><unit/></call>')
         else:
             response = self.coqtop.send('<call val="goal"></call>')
+        response = CoqGoalResponse(response, self.coq_version)
         feedback_text = self.cmds_sent[-1][2] if self.cmds_sent else ""
-        if feedback_text:
-            feedback_text = feedback_text + "\n\n"
-        return feedback_text + format_response(response, coq_version=self.coq_version)
+        return feedback_text, response
 
     def _rewind_to(self, index_of_earliest_undone_command):
         if index_of_earliest_undone_command == len(self.cmds_sent):
