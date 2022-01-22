@@ -803,6 +803,12 @@ class CoqUpdateOutputBufferCommand(sublime_plugin.TextCommand):
 
 # --------------------------------------------------------- Event Management
 
+def check_for_terminated_views():
+    for worker_key, worker in list(coq_threads.items()):
+        if worker.display.was_closed_by_user():
+            log.write("worker {} was closed??".format(worker))
+            stop_worker(worker_key, worker, "view closed by user")
+
 class CoqViewEventListener(sublime_plugin.ViewEventListener):
 
     @classmethod
@@ -841,13 +847,7 @@ class CoqViewEventListener(sublime_plugin.ViewEventListener):
         # The fix is easy enough: take this event callback as a "hint" that
         # some views have been closed.  At the next opportunity, check for
         # any views that have been closed.
-        sublime.set_timeout(self._check_for_terminated_views, 1)
-
-    def _check_for_terminated_views(self):
-        for worker_key, worker in list(coq_threads.items()):
-            if worker.display.was_closed_by_user():
-                log.write("worker {} was closed??".format(worker))
-                stop_worker(worker_key, worker, "view closed by user")
+        sublime.set_timeout(check_for_terminated_views, 1)
 
 def plugin_unloaded():
     """Hook called by Sublime just before the plugin is unloaded.
