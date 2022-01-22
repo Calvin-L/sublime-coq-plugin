@@ -803,12 +803,16 @@ class CoqUpdateOutputBufferCommand(sublime_plugin.TextCommand):
 
 # --------------------------------------------------------- Event Management
 
-class CoqViewEventListener(sublime_plugin.EventListener):
+class CoqViewEventListener(sublime_plugin.ViewEventListener):
 
-    def on_clone(self, view):
+    @classmethod
+    def is_applicable(cls, settings):
+        return settings.get("syntax", "").endswith("/Coq.tmLanguage")
+
+    def on_clone(self):
         pass # TODO: what happens when coq response views are duplicated?
 
-    def on_modified(self, view):
+    def on_modified(self):
         worker_key = view.id()
         worker = coq_threads.get(worker_key, None)
         if worker:
@@ -819,7 +823,7 @@ class CoqViewEventListener(sublime_plugin.EventListener):
             worker.mark_dirty(text=text)
             worker.display.set_bad_ranges([])
 
-    def on_close(self, view):
+    def on_close(self):
         # NOTE 2021/11/29: There seems to be a bug in Sublime 4 (build 4121)
         # where some views have .window() == None even when they are not being
         # closed---but only during event callbacks like this one.  (Maybe
