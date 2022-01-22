@@ -536,7 +536,38 @@ class CoqBot(object):
         if index_of_end_of_command:
             coq_cmd = text[start:index_of_end_of_command]
 
-            if self.coq_version >= (8,5):
+            if self.coq_version >= (8,15):
+                to_send = """
+                    <call val="Add">
+                      <pair>
+                        <pair>
+                          <pair>
+                            <pair>
+                              <string>{command}</string>
+                              <int>{edit_id}</int>
+                            </pair>
+                            <pair>
+                              <state_id val="{state_id}"/>
+                              <bool val="{verbose}"/>
+                            </pair>
+                          </pair>
+                          <int>{bp}</int>
+                        </pair>
+                        <pair>
+                          <int>{line_nb}</int>
+                          <int>{bol_pos}</int>
+                        </pair>
+                      </pair>
+                    </call>
+                    """.format(
+                    command=util.xml_encode(coq_cmd),
+                    edit_id=0,
+                    state_id=self.state_id,
+                    verbose="true" if verbose else "false",
+                    bp=0,
+                    line_nb=0,
+                    bol_pos=0)
+            elif self.coq_version >= (8,5):
                 to_send = '<call val="Add"><pair><pair><string>{cmd}</string><int>1</int></pair><pair><state_id val="{state_id}"/><bool val="{verbose}"/></pair></pair></call>'.format(
                     cmd=util.xml_encode(coq_cmd),
                     state_id=self.state_id,
