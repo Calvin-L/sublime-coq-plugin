@@ -31,6 +31,7 @@ from . import coq
 
 # relevant to future versions?
 # https://github.com/coq/coq/blob/master/dev/doc/xml-protocol.md
+# https://github.com/coq/coq/blob/master/dev/doc/changes.md
 
 # Regarding translucent colors in Sublime:
 # A region with the name "region.[color]ish" preserves foreground syntax
@@ -39,9 +40,6 @@ from . import coq
 # [2]: https://www.sublimetext.com/3dev
 
 # --------------------------------------------------------- Constants
-
-# COQ_MAJOR_VERSION = (8,5)
-COQ_MAJOR_VERSION = (8,9)
 
 TODO_SCOPE_NAME = "region.yellowish"
 TODO_FLAGS = sublime.DRAW_NO_OUTLINE # sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
@@ -474,7 +472,6 @@ class CoqWorker(threading.Thread):
 
         self.coq = coq.CoqBot(
             coq_install_dir=coq_install_dir,
-            coq_version=COQ_MAJOR_VERSION,
             working_dir=working_dir)
 
         self.text = ""

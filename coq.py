@@ -33,6 +33,57 @@ CHARSET = "utf-8"
 class StoppedException(Exception):
     pass
 
+def find_coq(coq_install_dir):
+    """Determine how to start Coq, and what version it is.
+
+    Coq has made several non-backwards-compatible changes to its API and
+    command-line options over the years.  This procedure attempts to detect
+    how Coq should be started and what version it is.
+
+    Returns `(version, args)`.  Note that `args` includes the program name.
+
+    Returns `None` if Coq could not be found.
+    """
+
+    version = None
+
+    for exe in ["coqidetop.opt", "coqidetop", "coqtop"]:
+        try:
+            out = subprocess.check_output([os.path.join(coq_install_dir, "bin", exe), "--version"]).decode(CHARSET)
+            version = re.search(r"version (\d+(\.\d+)+)", out)
+            if version is not None:
+                version = tuple(int(part) for part in version.group(1).split("."))
+                break
+        except:
+            pass
+
+    if version is None:
+        return None
+
+    cmd = None
+
+    if version >= (8,9):
+        if os.path.exists(os.path.join(coq_install_dir, "bin", "coqidetop.opt")):
+            cmd = [
+                os.path.join(coq_install_dir, "bin", "coqidetop.opt"),
+                "-main-channel", "stdfds"]
+        else:
+            cmd = [
+                os.path.join(coq_install_dir, "bin", "coqidetop"),
+                "-main-channel", "stdfds"]
+    elif version >= (8,5):
+        cmd = [
+            os.path.join(coq_install_dir, "bin", "coqtop"),
+            "-main-channel", "stdfds", "-ideslave"]
+    elif version >= (8,4):
+        cmd = [
+            os.path.join(coq_install_dir, "bin", "coqtop"),
+            "-ideslave"]
+    else:
+        return None
+
+    return (version, cmd)
+
 class CoqtopProc(object):
     """A simple wrapper around Coq's XML API.
 
@@ -43,68 +94,42 @@ class CoqtopProc(object):
     This class implements "stop-safety" (see above).
     """
 
-    def __init__(self, coq_install_dir, coq_version, extra_args=(), working_dir=None, verbose=False):
+    def __init__(self, coq_install_dir, extra_args=(), working_dir=None, verbose=False):
         """
         Spawns a new coqtop process and creates pipes for interaction.
 
-        This constructor tries several ways to start Coq from
-        <coq_install_dir>/bin:
+        This constructor tries to detect what version of Coq is being used
+        and how to start it.
 
-            - coqidetop.opt -main-channel stdfds               (Coq 8.9+)
-            - coqidetop     -main-channel stdfds               (Coq 8.9+)
-            - coqtop        -main-channel stdfds -ideslave     (Coq 8.5 to 8.8)
-            - coqtop        -ideslave                          (Coq 8.4)
+        This constructor tries to locate a suitable _CoqProject file and add
+        its contents to the command line arguments.
         """
         self.stop_lock = threading.Lock()
         self.alive = True
 
-        possible_cmds = []
+        coq_version, coq_cmd = find_coq(coq_install_dir)
 
-        if coq_version >= (8,5):
-            possible_cmds.append([
-                os.path.join(coq_install_dir, "bin", "coqidetop.opt"),
-                "-main-channel", "stdfds"])
-            possible_cmds.append([
-                os.path.join(coq_install_dir, "bin", "coqidetop"),
-                "-main-channel", "stdfds"])
-            possible_cmds.append([
-                os.path.join(coq_install_dir, "bin", "coqtop"),
-                "-main-channel", "stdfds", "-ideslave"])
-        else:
-            possible_cmds.append([
-                os.path.join(coq_install_dir, "bin", "coqtop"),
-                "-ideslave"])
+        self.coq_version = coq_version
 
-        extra_args = list(extra_args)
+        coq_cmd = list(coq_cmd)
+        coq_cmd.extend(extra_args)
+
         if working_dir is not None:
             project_file = self.find_coqproject_file(working_dir)
             if project_file is not None:
                 working_dir = os.path.dirname(project_file)
                 with open(project_file, "r") as f:
-                    extra_args.extend(shlex.split(f.read()))
-
-        for cmd in possible_cmds:
-            cmd.extend(extra_args)
+                    coq_cmd.extend(shlex.split(f.read()))
 
         self.verbose = verbose
 
-        ok = False
-        for cmd in possible_cmds:
-            print("Starting `{}` in {}".format(" ".join(cmd), working_dir))
-            try:
-                self.proc = subprocess.Popen(
-                    cmd,
-                    bufsize=0,
-                    cwd=working_dir,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE)
-                ok = True
-                break
-            except FileNotFoundError:
-                traceback.print_exc()
-
-        if not ok:
-            raise Exception("Coq executable was not found :(")
+        print("Starting `{}` version {} in {}".format(" ".join(coq_cmd), coq_version, working_dir))
+        self.proc = subprocess.Popen(
+            coq_cmd,
+            bufsize=0,
+            cwd=working_dir,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE)
 
         self.decoder = codecs.getincrementaldecoder(CHARSET)()
 
@@ -407,15 +432,14 @@ class CoqBot(object):
     This class implements "stop-safety" (see above).
     """
 
-    def __init__(self, coq_install_dir, coq_version, extra_args=(), working_dir=None, verbose=False):
+    def __init__(self, coq_install_dir, extra_args=(), working_dir=None, verbose=False):
         self.verbose = verbose
         self.coqtop = CoqtopProc(
             coq_install_dir=coq_install_dir,
-            coq_version=coq_version,
             extra_args=extra_args,
             working_dir=working_dir,
             verbose=verbose)
-        self.coq_version = coq_version
+        self.coq_version = self.coqtop.coq_version
         self.cmds_sent = [] # list of (command, state_id_before_command, output_of_command)
 
         self.state_id = None

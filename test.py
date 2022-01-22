@@ -98,7 +98,6 @@ def send_all(coq, text):
 def test_error(path, version):
     proc = coq.CoqBot(
         coq_install_dir=path,
-        coq_version=version,
         extra_args=["-q"], # -q: do not load rcfile
         verbose=True)
     try:
@@ -122,7 +121,6 @@ def test_error(path, version):
 def test1(path, version):
     proc = coq.CoqBot(
         coq_install_dir=path,
-        coq_version=version,
         extra_args=["-q"], # -q: do not load rcfile
         verbose=True)
     try:
@@ -192,7 +190,6 @@ def test_trivial_success(path, version):
     for inp in TESTS:
         proc = coq.CoqBot(
             coq_install_dir=path,
-            coq_version=version,
             extra_args=["-q"], # -q: do not load rcfile
             verbose=True)
         try:
@@ -204,7 +201,6 @@ def test_trivial_success(path, version):
 def test_retry_after_error(path, version):
     proc = coq.CoqBot(
         coq_install_dir=path,
-        coq_version=version,
         extra_args=["-q"], # -q: do not load rcfile
         verbose=True)
 
