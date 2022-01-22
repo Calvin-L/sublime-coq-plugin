@@ -803,11 +803,61 @@ class CoqUpdateOutputBufferCommand(sublime_plugin.TextCommand):
 
 # --------------------------------------------------------- Event Management
 
+def handle_view_modification(view, modification_start_index):
+    """Called when the user modifies the text in a view.
+
+    This is a helper procedure for both CoqViewEventListener and
+    CoqTextChangeListener.
+
+    Parameters:
+        - view (the modified view)
+        - modification_start_index (a lower-bound on the set of text positions
+          that were modified)
+    """
+    worker_key = view.id()
+    worker = coq_threads.get(worker_key, None)
+    if worker:
+        # NOTE: While not immediately obvious, I think that reading the
+        # `desired_high_water_mark` proprty is safe here, since only the
+        # main thread changes that property via `seek`.
+        worker_watermark = worker.desired_high_water_mark
+
+        # NOTE: tricky off-by-one prevention here.  Normally we could use `<`
+        # in this check since positions are indexed from 0.  However, positions
+        # up to `worker_watermark+1` matter (see the Region selected below), so
+        # we use `<=` to catch that +1.
+        if modification_start_index <= worker_watermark:
+            log.write("worker {} might be dirty [desired_high_water_mark={}, modification_start_index={}]".format(
+                worker,
+                worker_watermark,
+                modification_start_index))
+            text = view.substr(sublime.Region(0, worker_watermark + 1))
+            worker.mark_dirty(text=text)
+            worker.display.set_bad_ranges([])
+
 def check_for_terminated_views():
     for worker_key, worker in list(coq_threads.items()):
         if worker.display.was_closed_by_user():
             log.write("worker {} was closed??".format(worker))
             stop_worker(worker_key, worker, "view closed by user")
+
+# NOTE 2022/1/22: Sublime Text docs erroneously state that TextChangeListener
+# lives in the `sublime` module [1]; in fact, it lives in `sublime_plugin`.
+# [1]: https://www.sublimetext.com/docs/api_reference.html#sublime.TextChangeListener
+HAVE_ON_TEXT_CHANGED_SUPPORT = hasattr(sublime_plugin, "TextChangeListener")
+
+if HAVE_ON_TEXT_CHANGED_SUPPORT:
+
+    class CoqTextChangeListener(sublime_plugin.TextChangeListener):
+
+        # NOTE 2022/1/22: It might be nice to have an is_applicable method
+        # for this class like `ViewEventListener` has.  Alas, the Sublime devs
+        # didn't think of that, so we'll pick up changes from every Buffer.
+
+        def on_text_changed(self, changes):
+            modification_start_index = min(change.a.pt for change in changes)
+            for view in self.buffer.views():
+                handle_view_modification(view, modification_start_index)
 
 class CoqViewEventListener(sublime_plugin.ViewEventListener):
 
@@ -819,15 +869,10 @@ class CoqViewEventListener(sublime_plugin.ViewEventListener):
         pass # TODO: what happens when coq response views are duplicated?
 
     def on_modified(self):
-        worker_key = view.id()
-        worker = coq_threads.get(worker_key, None)
-        if worker:
-            # NOTE: While not immediately obvious, I think that reading the
-            # `desired_high_water_mark` proprty is safe here, since only the
-            # main thread changes that property via `seek`.
-            text = view.substr(sublime.Region(0, worker.desired_high_water_mark + 1))
-            worker.mark_dirty(text=text)
-            worker.display.set_bad_ranges([])
+        if not HAVE_ON_TEXT_CHANGED_SUPPORT:
+            # No information about what changed, so we have to be very
+            # pessimistic.
+            handle_view_modification(self.view, 0)
 
     def on_close(self):
         # NOTE 2021/11/29: There seems to be a bug in Sublime 4 (build 4121)
