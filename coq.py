@@ -212,6 +212,7 @@ TOKENS = (
     ("string",        re.compile(r'"[^"]*"')),
     ("whitespace",    re.compile(r'\s+')),
     ("word",          re.compile(r'\w+')),
+    ("dotdot",        re.compile(r'\.\.')), # e.g. Notation "'{{' x ; y ; .. ; z '}}'" := (Add _ (Add _ .. (Add _ ø z) .. y) x).
     ("fullstop",      re.compile(r'\.(?=\s|$)')),
 )
 
