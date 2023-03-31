@@ -853,14 +853,15 @@ if HAVE_ON_TEXT_CHANGED_SUPPORT:
 
     class CoqTextChangeListener(sublime_plugin.TextChangeListener):
 
-        # NOTE 2022/1/22: It might be nice to have an is_applicable method
-        # for this class like `ViewEventListener` has.  Alas, the Sublime devs
-        # didn't think of that, so we'll pick up changes from every Buffer.
-
         def on_text_changed(self, changes):
             modification_start_index = min(change.a.pt for change in changes)
             for view in self.buffer.views():
                 handle_view_modification(view, modification_start_index)
+
+        @classmethod
+        def is_applicable(cls, buffer):
+            return any(CoqViewEventListener.is_applicable(view.settings())
+                       for view in buffer.views())
 
 class CoqViewEventListener(sublime_plugin.ViewEventListener):
 
