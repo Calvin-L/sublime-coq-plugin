@@ -249,14 +249,16 @@ class SplitPaneDisplay(CoqDisplay):
             window.focus_view(self.view)
 
     def _apply(self, high_water_mark, todo_mark, goal, bad_ranges):
-        self.view.add_regions("Coq", [sublime.Region(0, high_water_mark)], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
+        self.view.add_regions("Coq", [sublime.Region(0, high_water_mark)], scope=DONE_SCOPE_NAME,
+            flags=DONE_FLAGS | sublime.NO_UNDO)
         if todo_mark > high_water_mark:
-            self.view.add_regions("CoqTODO", [sublime.Region(high_water_mark, todo_mark)], scope=TODO_SCOPE_NAME, flags=TODO_FLAGS)
+            self.view.add_regions("CoqTODO", [sublime.Region(high_water_mark, todo_mark)], scope=TODO_SCOPE_NAME,
+                flags=TODO_FLAGS | sublime.NO_UNDO)
         else:
             self.view.erase_regions("CoqTODO")
 
         bad_ranges = [sublime.Region(start, end) for (start, end) in bad_ranges]
-        self.view.add_regions("CoqError", bad_ranges, scope=ERROR_SCOPE_NAME, flags=ERROR_FLAGS)
+        self.view.add_regions("CoqError", bad_ranges, scope=ERROR_SCOPE_NAME, flags=ERROR_FLAGS | sublime.NO_UNDO)
 
         self.response_view.run_command("coq_update_output_buffer", {"text": goal})
 
@@ -308,14 +310,15 @@ class InlinePhantomDisplay(CoqDisplay):
 
     def _apply(self, high_water_mark, todo_mark, goal, bad_ranges):
         self.region = region = sublime.Region(0, high_water_mark)
-        self.view.add_regions("Coq", [region], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS)
+        self.view.add_regions("Coq", [region], scope=DONE_SCOPE_NAME, flags=DONE_FLAGS | sublime.NO_UNDO)
         if todo_mark > high_water_mark:
-            self.view.add_regions("CoqTODO", [sublime.Region(high_water_mark, todo_mark)], scope=TODO_SCOPE_NAME, flags=TODO_FLAGS)
+            self.view.add_regions("CoqTODO", [sublime.Region(high_water_mark, todo_mark)], scope=TODO_SCOPE_NAME,
+                flags=TODO_FLAGS | sublime.NO_UNDO)
         else:
             self.view.erase_regions("CoqTODO")
 
         bad_ranges = [sublime.Region(start, end) for (start, end) in bad_ranges]
-        self.view.add_regions("CoqError", bad_ranges, scope=ERROR_SCOPE_NAME, flags=ERROR_FLAGS)
+        self.view.add_regions("CoqError", bad_ranges, scope=ERROR_SCOPE_NAME, flags=ERROR_FLAGS | sublime.NO_UNDO)
 
         marker_pos = self.region.end()
         marker_region = sublime.Region(marker_pos, marker_pos)
