@@ -47,9 +47,19 @@ def find_coq(coq_install_dir):
 
     version = None
 
-    for exe in ["coqidetop.opt", "coqidetop", "coqtop"]:
+    env = dict(os.environ)
+
+    # Add coq install directory to the head of $PATH
+    env["PATH"] = os.pathsep.join([
+        os.path.join(coq_install_dir, "bin"),
+        env.get("PATH", os.defpath)])
+
+    for exe in ["coqidetop.opt", "coqidetop", "coqtop.opt", "coqtop"]:
         try:
-            out = subprocess.check_output([os.path.join(coq_install_dir, "bin", exe), "--version"]).decode(CHARSET)
+            out = subprocess.check_output(
+                [os.path.join(coq_install_dir, "bin", exe), "--version"],
+                env=env,
+                cwd="/").decode(CHARSET)
             version = re.search(r"version (\d+(\.\d+)+)", out)
             if version is not None:
                 version = tuple(int(part) for part in version.group(1).split("."))
