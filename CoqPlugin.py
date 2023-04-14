@@ -740,13 +740,18 @@ class CoqCommand(sublime_plugin.TextCommand):
                 view_style = FALLBACK_DISPLAY_STYLE
 
             DisplayClass = DISPLAY_CLASSES_BY_NAME[view_style]
-            worker = CoqWorker(
-                display         = DisplayClass(self.view),
-                coq_install_dir = settings.get("coq_install_dir"),
-                file_path       = self.view.file_name())
-            coq_threads[worker_key] = worker
-            worker.start()
-            log.write("spawned worker {} for view {}".format(worker, worker_key))
+            display = DisplayClass(self.view)
+            try:
+                worker = CoqWorker(
+                    display         = display,
+                    coq_install_dir = settings.get("coq_install_dir"),
+                    file_path       = self.view.file_name())
+                coq_threads[worker_key] = worker
+                worker.start()
+                log.write("spawned worker {} for view {}".format(worker, worker_key))
+            except Exception as e:
+                display.show_goal("Something went wrong: {}".format(e))
+                raise
 
         pos = self.seek_pos(worker)
         if pos is not None:

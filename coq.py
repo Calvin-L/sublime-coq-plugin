@@ -54,8 +54,12 @@ def find_coq(coq_install_dir):
             if version is not None:
                 version = tuple(int(part) for part in version.group(1).split("."))
                 break
-        except:
-            pass
+
+            print("Unable to read version from {}".format(exe))
+            print("{} stdout: {}".format(exe, out))
+            print("{} died with code {}".format(exe, out.returncode))
+        except Exception as e:
+            print("Error while reading version from {}: {}".format(exe, e))
 
     if version is None:
         return None
@@ -107,7 +111,10 @@ class CoqtopProc(object):
         self.stop_lock = threading.Lock()
         self.alive = True
 
-        coq_version, coq_cmd = find_coq(coq_install_dir)
+        coq_launch_info = find_coq(coq_install_dir)
+        if coq_launch_info is None:
+            raise Exception("Could not figure out how to launch Coq")
+        coq_version, coq_cmd = coq_launch_info
 
         self.coq_version = coq_version
 
