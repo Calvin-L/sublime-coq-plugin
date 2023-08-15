@@ -155,7 +155,7 @@
 
         <dict>
             <key>match</key>
-            <string>\b(Hint|Constructors|Resolve|Rewrite|Proof|Qed|Defined|Implicit|Set|Arguments|Notation|Section|End|Variables|Check|Print|Eval|shelve|Unshelve|Next\s+Obligation|Solve\s+(All\s+)?Obligations|Add\s+Printing\s+Constructor|Compute|Module|Abort)\b</string>
+            <string>\b(Hint|Constructors|Resolve|Rewrite|Proof|Qed|Defined|Implicit|Set|Arguments|Notation|Section|End|Variables|Check|Print|Eval|shelve|Unshelve|Next\s+Obligation|Solve\s+(All\s+)?Obligations|Add\s+Printing\s+Constructor|Compute|Module|Abort|About)\b</string>
             <key>comment</key>
             <string>Vernacular keywords</string>
             <key>name</key>
