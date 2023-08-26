@@ -879,8 +879,19 @@ if HAVE_ON_TEXT_CHANGED_SUPPORT:
 
         @classmethod
         def is_applicable(cls, buffer):
-            return any(CoqViewEventListener.is_applicable(view.settings())
-                       for view in buffer.views())
+            # While deeply unsatisfying, we have to listen to every change on
+            # every buffer or risk missing some events.  See a description of
+            # the issue here:
+            #     https://github.com/Calvin-L/sublime-coq-plugin/issues/9
+            # We should be able to fix this obvious performance penalty if the
+            # Sublime Text devs have time to act on an issue I filed upstream:
+            #     https://github.com/sublimehq/sublime_text/issues/6117
+            # If we discover this really does incur a meaningful performance
+            # penalty and the ST devs are unable (or unwilling) to fix the
+            # upstream issue, then we will have to switch to manually
+            # attach()-ing and detach()-ing instances of this listener as
+            # workers are spawned and stopped.
+            return True
 
 class CoqViewEventListener(sublime_plugin.ViewEventListener):
 
