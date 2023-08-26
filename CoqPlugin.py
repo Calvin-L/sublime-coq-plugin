@@ -543,7 +543,7 @@ class CoqWorker(threading.Thread):
     def stop(self):
         log.write("Waiting on monitor [stop]...")
         with self.monitor:
-            log.write("Acquired monitor! [step]")
+            log.write("Acquired monitor! [stop]")
             if self.state == "ALIVE":
                 self.state = "STOPPING"
                 self.display.show_goal(text="Stopping...")
