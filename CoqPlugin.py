@@ -694,6 +694,43 @@ class CoqWorker(threading.Thread):
 # or written from the Sublime Text main thread.
 coq_threads = dict()
 
+def spawn_worker(settings: sublime.Settings, view: sublime.View) -> CoqWorker:
+    """Spawn a worker using the given `settings` on the given `view`.
+
+    In addition to allocating a new `CoqWorker` object, this method:
+      - creates a `CoqDisplay`
+      - registers the worker in the `coq_threads` table
+      - starts the `CoqWorker`
+      - reports any errors encountered during spawning to the display
+    """
+
+    view_style = settings.get("view_style", FALLBACK_DISPLAY_STYLE)
+    if view_style not in DISPLAY_CLASSES_BY_NAME:
+        sublime.error_message('Your "view_style" setting specifies an '
+            + "unknown view style ({!r}). ".format(view_style)
+            + "Please use one of the official view styles: "
+            + ", ".join(DISPLAY_CLASSES_BY_NAME.keys())
+            + ". The plugin will now proceed using the "
+            + FALLBACK_DISPLAY_STYLE + " style.")
+        view_style = FALLBACK_DISPLAY_STYLE
+    DisplayClass = DISPLAY_CLASSES_BY_NAME[view_style]
+    display = DisplayClass(view)
+
+    try:
+        worker_key = view.id()
+        worker = CoqWorker(
+            display         = display,
+            coq_install_dir = settings.get("coq_install_dir"),
+            file_path       = view.file_name())
+        coq_threads[worker_key] = worker
+        worker.start()
+        log.write("spawned worker {} for view {}".format(worker, worker_key))
+    except Exception as e:
+        display.show_goal("Something went wrong: {}".format(e))
+        raise
+
+    return worker
+
 def stop_worker(view_id, worker, reason):
     log.write("stopping {} ({})...".format(worker, reason))
     worker.stop()
@@ -728,30 +765,7 @@ class CoqCommand(sublime_plugin.TextCommand):
         settings = sublime.load_settings("CoqInteractive.sublime-settings")
 
         if not worker:
-
-            view_style = settings.get("view_style", FALLBACK_DISPLAY_STYLE)
-            if view_style not in DISPLAY_CLASSES_BY_NAME:
-                sublime.error_message('Your "view_style" setting specifies an '
-                    + "unknown view style ({!r}). ".format(view_style)
-                    + "Please use one of the official view styles: "
-                    + ", ".join(DISPLAY_CLASSES_BY_NAME.keys())
-                    + ". The plugin will now proceed using the "
-                    + FALLBACK_DISPLAY_STYLE + " style.")
-                view_style = FALLBACK_DISPLAY_STYLE
-
-            DisplayClass = DISPLAY_CLASSES_BY_NAME[view_style]
-            display = DisplayClass(self.view)
-            try:
-                worker = CoqWorker(
-                    display         = display,
-                    coq_install_dir = settings.get("coq_install_dir"),
-                    file_path       = self.view.file_name())
-                coq_threads[worker_key] = worker
-                worker.start()
-                log.write("spawned worker {} for view {}".format(worker, worker_key))
-            except Exception as e:
-                display.show_goal("Something went wrong: {}".format(e))
-                raise
+            worker = spawn_worker(settings, self.view)
 
         pos = self.seek_pos(worker)
         if pos is not None:
