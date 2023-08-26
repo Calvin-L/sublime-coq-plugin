@@ -34,3 +34,4 @@ shift+ctrl+k: kill coqtop
    re-loaded because it changed on disk
  - Sublime Text 2 is not supported (and never will be)
  - The current goal takes a long time to display when there are many goals, even if the current goal is very small
+ - The plugin listens to every text change on every buffer whether or not Coq is running.  The performance impact should be negligible.  See [Issue 9](https://github.com/Calvin-L/sublime-coq-plugin/issues/9) for a longer description.
