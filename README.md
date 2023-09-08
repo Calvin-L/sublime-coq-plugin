@@ -59,7 +59,6 @@ I regularly test support for Coq versions 8.11 to 8.17.  In addition,
 ## Known Issues / TODO
 
  - Custom notations using the `.` symbol cause problems
- - I have no idea what happens if you duplicate the view in which you are interacting with Coq
  - Behavior is weird and undefined when the file you are interacting with is
    re-loaded because it changed on disk
  - Sublime Text 2 is not supported (and never will be)
