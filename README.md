@@ -26,6 +26,24 @@ ctrl+enter: evaluate to (or rewind to) the current cursor
 shift+ctrl+k: kill coqtop
 ```
 
+### Secret commands
+
+This plugin provides some fine-grained CoqIDE-style seek commands that are not bound to keys by default:
+  - `coq_seek_next`: evaluate the next command
+  - `coq_seek_prev`: rewind the previous command
+  - `coq_seek_end`: evaluate the entire file
+  - `coq_seek_start`: rewind to the start of the file
+
+To use these commands, bind them to keystrokes by putting a keystroke configuration into the plugin key bindings (Preferences -> Package Settings -> CoqInteractive -> Key Bindings--User).  For example:
+```json
+[
+    { "keys": ["ctrl+option+down"], "command": "coq_seek_next" },
+    { "keys": ["ctrl+option+up"], "command": "coq_seek_prev" },
+    { "keys": ["ctrl+option+right"], "command": "coq_seek_end" },
+    { "keys": ["ctrl+option+left"], "command": "coq_seek_start" }
+]
+```
+
 ## Compatibility with different versions of Coq
 
 I regularly test support for Coq versions 8.11 to 8.17.  In addition,
