@@ -1,6 +1,6 @@
 # Sublime-Coq
 
-This package provides Coq syntax highlighting and an interactive coqtop plugin for Coq in Sublime Text 3 & 4.  The plugin supports Coq versions 8.5 to 8.17.  (It may also support higher versions, but as of this writing 8.17 is the latest.)
+This package provides Coq syntax highlighting and an interactive coqtop plugin for Coq in Sublime Text 3 & 4.  The plugin supports Coq versions 8.11 to 8.17.
 
 I have been maintaining this plugin since 2014.  It has some advantages and disadvantages compared to the [community-supported Coq plugin](https://packagecontrol.io/packages/Coq) that you will find in Sublime's Package Control.  The main advantage is that Coq processing happens off the main thread, making the plugin much snappier.  I also regularly test support for all the versions of Coq this plugin claims to support.
 
@@ -25,6 +25,18 @@ You may need to tell the plugin where to find Coq on your system.  Modify your p
 ctrl+enter: evaluate to (or rewind to) the current cursor
 shift+ctrl+k: kill coqtop
 ```
+
+## Compatibility with different versions of Coq
+
+I regularly test support for Coq versions 8.11 to 8.17.  In addition,
+ - The Coq API has crystallized, so future releases of Coq are likely to work
+   as well.
+ - I believe that the plugin should work with Coq versions back to 8.5.  I used
+   to test support for versions going back to 8.5, but it is increasingly hard
+   to get these very old versions to run on new hardware.
+ - Coq 8.4 and earlier are not compatible.  While 8.4 was the latest release
+   when I started writing this plugin, 8.5 introduced some major breaking
+   changes to the API.
 
 ## Known Issues / TODO
 
