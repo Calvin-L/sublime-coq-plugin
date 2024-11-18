@@ -30,6 +30,28 @@ from . import util
 
 CHARSET = "utf-8"
 
+# Proper _CoqProject parsing
+# https://coq.inria.fr/doc/master/refman/practical-tools/utilities.html#building-a-rocq-project-with-coq-makefile-details
+# https://github.com/coq/coq/blob/146ae4a4b460e5d0c27eb9ec36c7f49105c9f708/lib/coqProject_file.ml#L357
+COQC_ARGS = {'-I': 1, '-R': 2, '-Q': 2 } # recognised option -> number of parameters
+
+
+def extract_coqc_args(coqproject):
+    coqc_args = []
+    tokens = iter(shlex.split(coqproject, comments=True))
+    for arg in tokens:
+        if not arg.startswith('-'):
+            coqc_args.append(arg)
+        elif arg in COQC_ARGS:
+            coqc_args.append(arg)
+            for i in range(0, COQC_ARGS.get(arg, 0)):
+                coqc_args.append(next(tokens))
+        elif arg == "-arg":
+            coqc_args.append(next(tokens))
+
+    return coqc_args
+
+
 class StoppedException(Exception):
     pass
 
@@ -136,7 +158,7 @@ class CoqtopProc(object):
             if project_file is not None:
                 working_dir = os.path.dirname(project_file)
                 with open(project_file, "r") as f:
-                    coq_cmd.extend(shlex.split(f.read()))
+                    coq_cmd.extend(extract_coqc_args(f.read()))
 
         self.verbose = verbose
 
