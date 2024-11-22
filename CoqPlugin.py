@@ -763,6 +763,9 @@ class CoqCommand(sublime_plugin.TextCommand):
             worker = None
 
         settings = sublime.load_settings("CoqInteractive.sublime-settings")
+        for k in ("coq_install_dir", "view_style", "move_cursor_after_command", "show_goals"):
+            if self.view.settings().has("coq."+k):
+                settings.set(k, self.view.settings()["coq."+k])
 
         if not worker:
             worker = spawn_worker(settings, self.view)
