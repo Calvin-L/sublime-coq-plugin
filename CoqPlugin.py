@@ -41,11 +41,11 @@ from . import coq
 
 # --------------------------------------------------------- Constants
 
-TODO_SCOPE_NAME = "region.yellowish"
+TODO_SCOPE_NAME = "region.yellowish coq.todo"
 TODO_FLAGS = sublime.DRAW_NO_OUTLINE # sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
-DONE_SCOPE_NAME = "region.greenish"
+DONE_SCOPE_NAME = "region.greenish coq.proven"
 DONE_FLAGS = sublime.DRAW_NO_OUTLINE # sublime.DRAW_SQUIGGLY_UNDERLINE | sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE
-ERROR_SCOPE_NAME = "region.error.coq"
+ERROR_SCOPE_NAME = "region.redish coq.error"
 ERROR_FLAGS = sublime.DRAW_NO_OUTLINE | sublime.DRAW_SQUIGGLY_UNDERLINE
 
 # Which display style to use if the user's settings specify an unrecognized
