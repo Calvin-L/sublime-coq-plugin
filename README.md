@@ -17,7 +17,22 @@ You can find the `sublime-text-folder/Packages` folder from Sublime Text by goin
 
 NOTE: This plugin expects to be in a folder named `sublime-coq-plugin` in your packages folder.  The plugin will still work if you rename the folder, but the menu entries to open the settings and keyboard mappings may not work properly.
 
+### Configuration (optional)
+
 You may need to tell the plugin where to find Coq on your system.  Modify your plugin-specific user settings (Preferences -> Package Settings -> CoqInteractive -> Settings--User).  You should copy and modify settings from the default file (Preferences -> Package Settings -> CoqInteractive -> Settings--Default).
+
+[Projects](https://www.sublimetext.com/docs/projects.html) can override the plugin settings.  This is especially useful if a project needs a specific version of Coq from an [Opam switch](https://opam.ocaml.org/doc/man/opam-switch.html).  To add a project-specific override, add a `"settings"` section to the project's `.sublime-project` file and prefix the plugin settings with "`coq.`".  For example, a `.sublime-project` file might look like:
+
+```json
+{
+  "folders": [
+    // ...
+  ],
+  "settings": {
+    "coq.coq_install_dir": "/path/to/coq",
+  }
+}
+```
 
 ## Usage
 

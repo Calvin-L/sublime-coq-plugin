@@ -52,6 +52,14 @@ ERROR_FLAGS = sublime.DRAW_NO_OUTLINE | sublime.DRAW_SQUIGGLY_UNDERLINE
 # view style.
 FALLBACK_DISPLAY_STYLE = "inline"
 
+# --------------------------------------------------------- Settings
+
+def get_setting(settings: sublime.Settings, view: sublime.View, setting_name: str, default_value=None):
+    try:
+        return view.settings()["coq." + setting_name]
+    except KeyError:
+        return settings.get(setting_name, default_value)
+
 # --------------------------------------------------------- Feedback Display
 
 """ !!! IMPORTANT NOTE !!!
@@ -136,7 +144,7 @@ class CoqDisplay(object):
             self.todo_mark = todo_mark
 
     def show_goal(self, text="", goal=None):
-        goal = format_goal_response(goal) if goal else ""
+        goal = format_goal_response(self.view, goal) if goal else ""
 
         with self._update():
             self.goal = (text + "\n\n" + goal).strip("\n")
@@ -345,7 +353,7 @@ DISPLAY_CLASSES_BY_NAME = {
 
 # --------------------------------------------------------- Display formatting
 
-def format_goal_response(rp):
+def format_goal_response(view: sublime.View, rp: coq.CoqGoalResponse):
     """Format a CoqGoalResponse into a readable form."""
 
     settings = sublime.load_settings("CoqInteractive.sublime-settings")
@@ -393,7 +401,7 @@ def format_goal_response(rp):
         else:
             return feedback + "No more goals."
 
-    if settings.get("show_goals", "focused") == "primary":
+    if get_setting(settings, view, "show_goals", "focused") == "primary":
         goals_to_show = [primary_goal] if primary_goal else []
     else:
         goals_to_show = focused_goals
@@ -704,7 +712,7 @@ def spawn_worker(settings: sublime.Settings, view: sublime.View) -> CoqWorker:
       - reports any errors encountered during spawning to the display
     """
 
-    view_style = settings.get("view_style", FALLBACK_DISPLAY_STYLE)
+    view_style = get_setting(settings, view, "view_style", FALLBACK_DISPLAY_STYLE)
     if view_style not in DISPLAY_CLASSES_BY_NAME:
         sublime.error_message('Your "view_style" setting specifies an '
             + "unknown view style ({!r}). ".format(view_style)
@@ -720,7 +728,7 @@ def spawn_worker(settings: sublime.Settings, view: sublime.View) -> CoqWorker:
         worker_key = view.id()
         worker = CoqWorker(
             display         = display,
-            coq_install_dir = settings.get("coq_install_dir"),
+            coq_install_dir = get_setting(settings, view, "coq_install_dir"),
             file_path       = view.file_name())
         coq_threads[worker_key] = worker
         worker.start()
@@ -772,7 +780,7 @@ class CoqCommand(sublime_plugin.TextCommand):
             text = self.view.substr(sublime.Region(0, pos + 1))
             worker.seek(text=text, pos=pos)
 
-            if settings.get("move_cursor_after_command", True):
+            if get_setting(settings, self.view, "move_cursor_after_command", True):
                 # In inline mode, move after the phantom block
                 is_inline = isinstance(worker.display, DISPLAY_CLASSES_BY_NAME["inline"])
                 if is_inline and self.view.substr(pos) == "\n":
